@@ -22,7 +22,6 @@ struct ChildTask: Identifiable, Codable {
 
 // The UI View
 struct ChildTaskView: View {
-    // Connect to the app's refresh trigger
     @AppStorage("authTrigger") var authTrigger = 0
     
     var token: String
@@ -30,16 +29,15 @@ struct ChildTaskView: View {
     @State private var isLoading = false
     
     var body: some View {
-        VStack {            
+        VStack {
             List {
                 if tasks.isEmpty {
-                    Text("No tasks for today! 🎉")
+                    Text("No tasks for today!")
                         .foregroundColor(.gray)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 40)
                         .listRowSeparator(.hidden)
                 } else {
-                    // Loop through the tasks if they exist
                     ForEach(tasks) { task in
                         HStack {
                             Text(task.title)
@@ -57,22 +55,20 @@ struct ChildTaskView: View {
             }
             .listStyle(.plain)
             .refreshable {
-                // This trigger when the user swipes down to reaload the most recently added tasks
                 await fetchTasks()
             }
         }
         .task {
-            // This runs once when the screen first opens
             await fetchTasks()
         }
-        .navigationTitle("Today's Tasks") // Moves the title to the top bar
+        .navigationTitle("Today's Tasks")
         .navigationBarTitleDisplayMode(.large)
-        // Add the Log Out button to the top right
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Log Out") {
-                    KeychainSwift().delete("child_token") // Delete the token
-                    authTrigger += 1 // Force the app to redraw
+                    KeychainSwift().delete("child_token")
+                    KeychainSwift().delete("child_refresh") // <-- Clear refresh token on logout
+                    authTrigger += 1
                 }
                 .foregroundColor(.red)
             }
@@ -81,25 +77,76 @@ struct ChildTaskView: View {
     
     func fetchTasks() async {
         isLoading = true
-        guard let url = URL(string: "https://bokijonow.pythonanywhere.com/api/v1/today") else { return }
+        let success = await performFetch()
+        
+        // If performFetch returned false, it means we got a 401 Expired error
+        if !success {
+            let refreshed = await refreshAccessToken()
+            
+            if refreshed {
+                // The token was updated! Retry the fetch silently.
+                let _ = await performFetch()
+            } else {
+                // The refresh token is ALSO dead. Force a logout.
+                KeychainSwift().delete("child_token")
+                KeychainSwift().delete("child_refresh")
+                authTrigger += 1
+            }
+        }
+        isLoading = false
+    }
+    
+    func performFetch() async -> Bool {
+        guard let url = URL(string: "https://bokijonow.pythonanywhere.com/api/v1/today") else { return false }
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        
-        // Fetch the most up-to-date JSON from the database
         request.cachePolicy = .reloadIgnoringLocalCacheData
         
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        // Always grab the freshest token directly from the Keychain
+        let currentToken = KeychainSwift().get("child_token") ?? token
+        request.setValue("Bearer \(currentToken)", forHTTPHeaderField: "Authorization")
         
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                let decoded = try JSONDecoder().decode(TodayResponse.self, from: data)
-                self.tasks = decoded.tasks
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 200 {
+                    let decoded = try JSONDecoder().decode(TodayResponse.self, from: data)
+                    self.tasks = decoded.tasks
+                    return true
+                } else if httpResponse.statusCode == 401 {
+                    return false
+                }
             }
         } catch {
             print("Error fetching tasks: \(error)")
         }
-        isLoading = false
+        return true
+    }
+    
+    func refreshAccessToken() async -> Bool {
+        guard let refreshToken = KeychainSwift().get("child_refresh") else { return false }
+        guard let url = URL(string: "https://bokijonow.pythonanywhere.com/api/v1/auth/refresh/") else { return false }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body = ["refresh": refreshToken]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let newAccess = json["access"] as? String {
+                    KeychainSwift().set(newAccess, forKey: "child_token")
+                    return true
+                }
+            }
+        } catch {
+            print("Failed to refresh token: \(error)")
+        }
+        return false
     }
 }

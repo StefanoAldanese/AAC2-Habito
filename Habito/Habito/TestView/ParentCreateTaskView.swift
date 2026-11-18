@@ -68,7 +68,7 @@ struct ParentCreateTaskView: View {
             let (data, response) = try await URLSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse {
                 if httpResponse.statusCode == 201 {
-                    statusMessage = "✅ Task created successfully!"
+                    statusMessage = "Task created successfully!"
                     taskTitle = "" // clear field
                 } else {
                     // FOR DEBUG: This will display the error code and message from Django

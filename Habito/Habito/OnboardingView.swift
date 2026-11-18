@@ -144,9 +144,15 @@ struct ParentLoginView: View {
                     if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                        let parentDict = json["parent"] as? [String: Any],
                        let existingRoomCode = parentDict["room_code"] as? String,
-                       let accessToken = json["access"] as? String {
+                       let accessToken = json["access"] as? String,
+                       
+                        // Implementation of Refresh Tokens
+                       let refreshToken = json["refresh"] as? String {
                         
+                        
+                        // Using KeychainSwift to securely save the access and refresh tokens to keep the user logged in
                         KeychainSwift().set(accessToken, forKey: "parent_access")
+                        KeychainSwift().set(refreshToken, forKey: "parent_refresh")
                         self.fetchedRoomCode = existingRoomCode
                         self.isLoggedIn = true
                     } else {
@@ -259,10 +265,12 @@ struct ParentRegistrationView: View {
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let parentDict = json["parent"] as? [String: Any],
                    let newRoomCode = parentDict["room_code"] as? String,
-                   let accessToken = json["access"] as? String {
+                   let accessToken = json["access"] as? String,
+                   let refreshToken = json["refresh"] as? String {
                     
-                    // Using KeychainSwift to save the [ROOM CODE], so they dont have to insert it again
+                    // Using KeychainSwift to securely save the access and refresh tokens to keep the user logged in
                     KeychainSwift().set(accessToken, forKey: "parent_access")
+                    KeychainSwift().set(refreshToken, forKey: "parent_refresh")
                     self.fetchedRoomCode = newRoomCode
                     self.isRegistered = true
                 } else {
@@ -408,11 +416,13 @@ struct ChildInsertCodeView: View {
             
             if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 {
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let receivedToken = json["child_token"] as? String {
+                   let receivedToken = json["child_token"] as? String,
+                   let refreshToken = json["refresh"] as? String {
                     
-                    // Using KeychainSwift to save the [ROOM CODE], so they dont have to insert it again
+                    // Using KeychainSwift to securely save the access and refresh tokens to keep the user logged in
                     let keychain = KeychainSwift()
                     keychain.set(receivedToken, forKey: "child_token")
+                    keychain.set(refreshToken, forKey: "child_refresh")
                     
                     self.childToken = receivedToken
                     self.isJoined = true

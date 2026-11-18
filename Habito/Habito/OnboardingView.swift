@@ -131,7 +131,8 @@ struct ParentLoginView: View {
         
         let bodyParams = [
             "email": email,
-            "password": password
+            "password": password,
+            "timezone": TimeZone.current.identifier
         ]
         
         request.httpBody = try? JSONSerialization.data(withJSONObject: bodyParams)
@@ -151,8 +152,8 @@ struct ParentLoginView: View {
                         
                         
                         // Using KeychainSwift to securely save the access and refresh tokens to keep the user logged in
-                        KeychainSwift().set(accessToken, forKey: "parent_access")
-                        KeychainSwift().set(refreshToken, forKey: "parent_refresh")
+                        KeychainSwift().set(accessToken, forKey: ParentAuth.accessKey)
+                       KeychainSwift().set(refreshToken, forKey: ParentAuth.refreshKey)
                         self.fetchedRoomCode = existingRoomCode
                         self.isLoggedIn = true
                     } else {
@@ -269,8 +270,8 @@ struct ParentRegistrationView: View {
                    let refreshToken = json["refresh"] as? String {
                     
                     // Using KeychainSwift to securely save the access and refresh tokens to keep the user logged in
-                    KeychainSwift().set(accessToken, forKey: "parent_access")
-                    KeychainSwift().set(refreshToken, forKey: "parent_refresh")
+                    KeychainSwift().set(accessToken, forKey: ParentAuth.accessKey)
+                    KeychainSwift().set(refreshToken, forKey: ParentAuth.refreshKey)
                     self.fetchedRoomCode = newRoomCode
                     self.isRegistered = true
                 } else {
@@ -416,14 +417,12 @@ struct ChildInsertCodeView: View {
             
             if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 {
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let receivedToken = json["child_token"] as? String,
-                   let refreshToken = json["refresh"] as? String {
-                    
-                    // Using KeychainSwift to securely save the access and refresh tokens to keep the user logged in
-                    let keychain = KeychainSwift()
-                    keychain.set(receivedToken, forKey: "child_token")
-                    keychain.set(refreshToken, forKey: "child_refresh")
-                    
+                   let receivedToken = json["child_token"] as? String {
+
+                    // The child token never expires, so there is no refresh token.
+                    // It only stops working if the parent links a new device.
+                    KeychainSwift().set(receivedToken, forKey: "child_token")
+
                     self.childToken = receivedToken
                     self.isJoined = true
                 } else {

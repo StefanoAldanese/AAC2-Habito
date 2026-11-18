@@ -20,7 +20,7 @@ struct ContentView: View {
             }
             
         // 2. Check if a parent is logged in
-        } else if KeychainSwift().get("parent_access") != nil {
+        } else if ParentAuth.accessToken != nil {
             NavigationStack {
                 ParentCreateTaskView()
             }

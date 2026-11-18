@@ -41,8 +41,10 @@ struct ParentCreateTaskView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Log Out") {
-                    KeychainSwift().delete("parent_access") // Delete the token
-                    authTrigger += 1 // Force the app to redraw and show Onboarding
+                    Task {
+                        await ParentAuth.logout() // revokes the refresh token, clears both tokens
+                        authTrigger += 1 // Force the app to redraw and show Onboarding
+                    }
                 }
                 .foregroundColor(.red)
             }
@@ -50,32 +52,33 @@ struct ParentCreateTaskView: View {
     }
     
     func createTask() async {
-        guard let token = KeychainSwift().get("parent_access") else {
-            statusMessage = "Error: Parent not logged in"
-            return
-        }
-        
-        guard let url = URL(string: "https://bokijonow.pythonanywhere.com/api/v1/tasks") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        
-        let bodyParams = ["title": taskTitle, "repeat": "once"]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: bodyParams)
+        guard let url = URL(string: "\(ParentAuth.baseURL)/tasks") else { return }
+        let body = try? JSONSerialization.data(withJSONObject: ["title": taskTitle, "repeat": "once"])
         
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse {
-                if httpResponse.statusCode == 201 {
-                    statusMessage = "Task created successfully!"
-                    taskTitle = "" // clear field
-                } else {
-                    // FOR DEBUG: This will display the error code and message from Django
-                    let serverError = String(data: data, encoding: .utf8) ?? "Unknown error"
-                    statusMessage = "Error \(httpResponse.statusCode): \(serverError)"
-                    print("Backend Error: \(serverError)")
-                }
+            // ParentAuth.send refreshes the access token once on a 401 and retries.
+            guard let (data, httpResponse) = try await ParentAuth.send({ token in
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                request.httpBody = body
+                return request
+            }) else {
+                // No usable token: the refresh token expired or was revoked.
+                ParentAuth.clearLocal()
+                authTrigger += 1
+                return
+            }
+            
+            if httpResponse.statusCode == 201 {
+                statusMessage = "Task created successfully!"
+                taskTitle = "" // clear field
+            } else {
+                // FOR DEBUG: This will display the error code and message from Django
+                let serverError = String(data: data, encoding: .utf8) ?? "Unknown error"
+                statusMessage = "Error \(httpResponse.statusCode): \(serverError)"
+                print("Backend Error: \(serverError)")
             }
         } catch {
             statusMessage = "Network error: \(error.localizedDescription)"

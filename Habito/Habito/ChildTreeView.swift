@@ -5,9 +5,10 @@
 //  The child's main screen, where the animations come together: the tree with
 //  one apple per task, the caterpillar in the corner and the progress bar on top.
 //
-//  - Tap an apple to hear its task.
-//  - Grab an apple to snap it off and carry it; near the caterpillar it opens its
-//    mouth. Drop it in to eat it, which marks the task done (ChildTreeModel).
+//  - Tap an apple to hear its task. "I did it!" marks the task done on the server
+//    (ChildTreeModel) and the apple turns ripe.
+//  - Grab a ripe apple to snap it off and carry it; near the caterpillar it opens
+//    its mouth. Drop it in to feed it. Locked apples stay on the tree.
 //  - Let go anywhere else, or throw it, and it falls away and regrows.
 //  - Shake the phone: dizzy caterpillar, rustling leaves, swinging apples, and new
 //    tasks grow in as new apples.
@@ -100,6 +101,7 @@ struct ChildTreeView: View {
     @State private var chew = 0
     @State private var snapped = 0
     @State private var fed = 0
+    @State private var ripened = 0
 
     @State private var message: String?
     @State private var messageID = 0
@@ -133,7 +135,7 @@ struct ChildTreeView: View {
         }
         .onChange(of: dragging) { _, new in
             // The system cancelled the drag (a call, a system gesture): drop the apple.
-            guard new == nil, let id = carried, let task = model.openTasks.first(where: { $0.id == id }) else { return }
+            guard new == nil, let id = carried, let task = model.onTree.first(where: { $0.id == id }) else { return }
             drop(task, at: hand, velocity: CGVector(dx: 0, dy: -80), screen: UIScreen.main.bounds.size)
         }
         .onShake { phase in
@@ -142,6 +144,7 @@ struct ChildTreeView: View {
         }
         .sensoryFeedback(.impact(weight: .light), trigger: snapped)
         .sensoryFeedback(.success, trigger: fed)
+        .sensoryFeedback(.impact(weight: .medium), trigger: ripened)
         .sensoryFeedback(.impact(flexibility: .soft), trigger: shake)
     }
 
@@ -232,6 +235,7 @@ struct ChildTreeView: View {
     private func apple(_ task: TaskItem, spot: Int, layout: TreeLayout) -> some View {
         let home = layout.spot(spot)
         let away = carried == task.id || eating == task.id || offTree.contains(task.id)
+        let ripe = model.isRipe(task.id)
         return AppleView(
             size: layout.apple,
             swing: shake,
@@ -241,26 +245,31 @@ struct ChildTreeView: View {
             growsSlowly: model.arrivals.contains(task.id),
             onGrown: { model.arrived(task.id) }
         )
+        // A ripe apple glows: it can be picked.
+        .shadow(color: ripe ? .white : .clear, radius: 4)
+        .shadow(color: ripe ? Color.habitoGreen.opacity(0.9) : .clear, radius: 9)
+        .animation(.easeOut(duration: 0.4), value: ripe)
         .frame(width: max(56, layout.apple.width + 18), height: max(56, layout.apple.height + 18))
         .contentShape(Rectangle())
         .onTapGesture { bubble = task.id }
-        // Never switch the drag off while it runs: that would cancel it mid-way.
-        .gesture(drag(task, home: home, layout: layout), including: eating == nil ? .all : .none)
+        // Only a ripe apple can be picked. (Ripeness does not change during a drag, so
+        // the drag is never switched off mid-way.)
+        .gesture(drag(task, home: home, layout: layout), including: ripe && eating == nil ? .all : .none)
         .popover(
             isPresented: Binding(get: { bubble == task.id }, set: { if !$0, bubble == task.id { bubble = nil } }),
             attachmentAnchor: .rect(.bounds),
             arrowEdge: .top
         ) {
-            TaskBubble(task: task)
+            TaskBubble(task: task, isRipe: ripe) { await markDone(task) }
         }
         .position(home)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Apple: \(task.title)")
-        .accessibilityValue(away ? "Off the tree" : "On the tree")
-        .accessibilityHint("Drag it to the caterpillar when the task is done")
+        .accessibilityValue(away ? "Off the tree" : (ripe ? "Ready to feed" : "On the tree"))
+        .accessibilityHint(ripe ? "Drag it to the caterpillar to feed it" : "Opens the task")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(named: "Feed the caterpillar") {
-            if eating == nil { eat(task, from: home, mouth: layout.mouth) }
+            if ripe, eating == nil { eat(task, from: home, mouth: layout.mouth) }
         }
     }
 
@@ -386,23 +395,29 @@ struct ChildTreeView: View {
     }
 
     private func finishEating(_ task: TaskItem) async {
-        let outcome = await model.complete(task)
-        switch outcome {
+        model.eat(task)
+        chew += 1
+        fed += 1
+        if let today = model.todayList { game.record(today) }
+        eating = nil
+        swallowing = false
+    }
+
+    /// "I did it!": the server marks the task done and tells the parent; the apple ripens.
+    private func markDone(_ task: TaskItem) async {
+        switch await model.markDone(task) {
         case .done:
-            chew += 1
-            fed += 1
-            if let today = model.todayList { game.record(today) }
+            ripened += 1
+            bubble = nil
+            show("Well done! Now pull the apple off and feed the caterpillar.")
         case .gone(let text):
+            bubble = nil
             show(text)
         case .failed(let text):
             show(text)
-            regrow[task.id, default: 0] += 1
         case .signedOut:
             signOut()
-            return
         }
-        eating = nil
-        swallowing = false
     }
 
     // MARK: Shake
@@ -425,14 +440,14 @@ struct ChildTreeView: View {
 
     /// Fetching new tasks after a shake. The model skips it when one ran moments ago.
     private func refreshAfterShake() async {
-        let before = model.openTasks.count
+        let before = model.onTree.count
         guard let stillJoined = await model.refreshAfterShake() else { return }
         guard stillJoined else { signOut(); return }
         if let today = model.todayList { game.record(today) }
         let added = model.arrivals.count
         if model.loadError == nil, added > 0 {
             show(added == 1 ? "A new apple is growing!" : "\(added) new apples are growing!")
-        } else if model.openTasks.count == before {
+        } else if model.onTree.count == before {
             show("No new tasks yet.")
         }
     }
@@ -481,6 +496,9 @@ private extension CGFloat {
 
 private struct TaskBubble: View {
     let task: TaskItem
+    let isRipe: Bool
+    let onDone: () async -> Void
+    @State private var isBusy = false
 
     private var spoken: String {
         task.descriptionText.isEmpty ? task.title : "\(task.title). \(task.descriptionText)"
@@ -507,11 +525,35 @@ private struct TaskBubble: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 14)
-            Label("Done? Pull the apple off and feed it to the caterpillar.", systemImage: "hand.draw.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.habitoGreenDeep)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 12)
+            if isRipe {
+                Label("Done! Pull the apple off and feed it to the caterpillar.", systemImage: "hand.draw.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.habitoGreenDeep)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 12)
+            } else {
+                Button {
+                    guard !isBusy else { return }
+                    isBusy = true
+                    Task {
+                        await onDone()
+                        isBusy = false
+                    }
+                } label: {
+                    ZStack {
+                        Text("I did it!").opacity(isBusy ? 0 : 1)
+                        if isBusy { ProgressView().tint(Color.habitoGreenDeep) }
+                    }
+                    .font(.headline)
+                    .foregroundStyle(Color.habitoGreenDeep)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(Color.habitoGreen.opacity(0.18), in: Capsule())
+                    .overlay(Capsule().stroke(Color.habitoGreen, lineWidth: 2))
+                }
+                .buttonStyle(.plain)
+                .disabled(isBusy)
+                .padding(.top, 10)
+            }
         }
         .padding(18)
         .frame(width: 300, alignment: .leading)

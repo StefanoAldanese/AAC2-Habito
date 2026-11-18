@@ -4,7 +4,12 @@
 //
 //  The tree screen's state and server work, with no animation in it: today's
 //  tasks, which spot on the tree each apple hangs on, which apples are new,
-//  refreshing on a shake, and marking a task done when an apple is eaten.
+//  and refreshing on a shake.
+//
+//  An apple's life: it hangs locked while its task is open. "I did it!" marks
+//  the task done on the server (which notifies the parent) and the apple turns
+//  ripe: now it can be picked. Feeding it to the caterpillar eats it; that part
+//  stays on this phone. Ripe apples are remembered for the day.
 //
 
 import Foundation
@@ -31,7 +36,10 @@ final class ChildTreeModel {
     /// Apples that appeared after the first load: they grow in slowly.
     private(set) var arrivals: Set<String> = []
 
-    /// Spot on the tree for each open task. A task keeps its spot until it is done.
+    /// Tasks done on the server whose apple has not been eaten yet: these can be picked.
+    private(set) var ripe: Set<String>
+
+    /// Spot on the tree for each apple. A task keeps its spot until its apple is eaten.
     private var spots: [String: Int] = [:]
     /// Every task id seen since the screen opened, to tell new tasks apart.
     private var known: Set<String> = []
@@ -39,17 +47,32 @@ final class ChildTreeModel {
 
     static let shakeCooldown: TimeInterval = 2
 
-    var openTasks: [TaskItem] { tasks.filter { !$0.isDone } }
-    var doneCount: Int { tasks.filter(\.isDone).count }
-
-    /// Today's share of tasks done, 0 to 1. Zero when there are no tasks.
-    var todayFraction: Double {
-        tasks.isEmpty ? 0 : Double(doneCount) / Double(tasks.count)
+    private let defaults: UserDefaults
+    private enum Key {
+        static let ripeDate = "child.ripe.date"
+        static let ripeIDs = "child.ripe.ids"
     }
 
-    /// Apples on the tree: open tasks that have a spot (at most ten at a time).
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        ripe = Set(defaults.stringArray(forKey: Key.ripeIDs) ?? [])
+        date = defaults.string(forKey: Key.ripeDate)
+    }
+
+    /// Tasks whose apple is still on the tree: open ones (locked) and ripe ones.
+    var onTree: [TaskItem] { tasks.filter { !$0.isDone || ripe.contains($0.id) } }
+    private var eatenCount: Int { tasks.filter { $0.isDone && !ripe.contains($0.id) }.count }
+
+    func isRipe(_ id: String) -> Bool { ripe.contains(id) }
+
+    /// Today's share of apples eaten, 0 to 1. Zero when there are no tasks.
+    var todayFraction: Double {
+        tasks.isEmpty ? 0 : Double(eatenCount) / Double(tasks.count)
+    }
+
+    /// Apples on the tree with their spot (at most ten at a time).
     var hanging: [(task: TaskItem, spot: Int)] {
-        openTasks.compactMap { task in spots[task.id].map { (task, $0) } }
+        onTree.compactMap { task in spots[task.id].map { (task, $0) } }
             .sorted { $0.spot < $1.spot }
     }
 
@@ -84,19 +107,24 @@ final class ChildTreeModel {
     private func apply(_ fresh: TodayList) {
         let firstLoad = !loaded || date != fresh.date
         if date != fresh.date {
-            // A new day: every apple is today's, none of them "arrives".
+            // A new day: every apple is today's, none of them "arrives", none is ripe.
             spots = [:]
             known = []
             arrivals = []
+            ripe = []
         }
         date = fresh.date
         tasks = fresh.tasks
 
-        let open = fresh.tasks.filter { !$0.isDone }
-        let openIDs = Set(open.map(\.id))
-        spots = spots.filter { openIDs.contains($0.key) }
+        // A ripe apple stays ripe while its task is done (the parent can undo it).
+        ripe.formIntersection(fresh.tasks.filter(\.isDone).map(\.id))
+        saveRipe()
+
+        let hangingTasks = onTree
+        let hangingIDs = Set(hangingTasks.map(\.id))
+        spots = spots.filter { hangingIDs.contains($0.key) }
         var free = Array(Set(0..<TreeLayout.spotCount).subtracting(spots.values)).sorted()
-        for task in open where spots[task.id] == nil {
+        for task in hangingTasks where spots[task.id] == nil {
             guard !free.isEmpty else { break }
             spots[task.id] = free.removeFirst()
         }
@@ -105,7 +133,7 @@ final class ChildTreeModel {
         if !firstLoad {
             arrivals.formUnion(ids.subtracting(known))
         }
-        arrivals.formIntersection(openIDs)
+        arrivals.formIntersection(hangingIDs)
         known.formUnion(ids)
     }
 
@@ -116,9 +144,9 @@ final class ChildTreeModel {
 
     // MARK: Completing
 
-    /// The apple was eaten: tell the server the task is done. The server records it and
-    /// sends the parent's notification; then today's list is reloaded.
-    func complete(_ task: TaskItem) async -> Outcome {
+    /// "I did it!": tell the server the task is done. The server records it and sends the
+    /// parent's notification; the apple turns ripe and can be picked.
+    func markDone(_ task: TaskItem) async -> Outcome {
         do {
             try await HabitoAPI.markDone(id: task.id)
         } catch {
@@ -135,19 +163,38 @@ final class ChildTreeModel {
                 return .failed(error.habitoMessage)
             }
         }
-        // Mark it done right away so the bar moves, then confirm with the server.
+        ripe.insert(task.id)
+        saveRipe()
         if let index = tasks.firstIndex(where: { $0.id == task.id }) {
             let old = tasks[index]
             tasks[index] = TaskItem(id: old.id, title: old.title, description: old.description,
                                     repeatKind: old.repeatKind, dueDate: old.dueDate, status: "done", doneAt: Date())
-            spots[task.id] = nil
         }
         _ = await load()
         return .done
     }
 
-    /// Today's list in the shape the game counts perfect days from.
+    /// The caterpillar ate a ripe apple. Nothing to tell the server: the task is already done.
+    func eat(_ task: TaskItem) {
+        guard ripe.remove(task.id) != nil else { return }
+        spots[task.id] = nil
+        saveRipe()
+    }
+
+    private func saveRipe() {
+        defaults.set(date, forKey: Key.ripeDate)
+        defaults.set(ripe.sorted(), forKey: Key.ripeIDs)
+    }
+
+    /// Today's list in the shape the game counts perfect days from: an apple not yet eaten
+    /// counts as not done, so the day is perfect once the last apple is eaten.
     var todayList: TodayList? {
-        date.map { TodayList(date: $0, tasks: tasks) }
+        date.map { day in
+            TodayList(date: day, tasks: tasks.map { task in
+                guard ripe.contains(task.id) else { return task }
+                return TaskItem(id: task.id, title: task.title, description: task.description,
+                                repeatKind: task.repeatKind, dueDate: task.dueDate, status: "open", doneAt: nil)
+            })
+        }
     }
 }

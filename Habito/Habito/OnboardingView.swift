@@ -11,7 +11,6 @@
 
 import SwiftUI
 import Observation
-import KeychainSwift
 
 enum OnboardingRoute: Hashable {
     case signUp, logIn, code, congratulations, child
@@ -378,121 +377,6 @@ private struct CongratulationsView: View {
         }
     }
 }
-
-// MARK: - 4. Child: Insert [ROOM CODE]
-struct ChildInsertCodeView: View {
-    @State private var roomCode = ""
-    @State private var isLoading = false
-    @State private var errorMessage = ""
-    @State private var isJoined = false
-    @State private var childToken = ""
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Join Your Family")
-                .font(.title2)
-                .fontWeight(.bold)
-            
-            Text("Ask your parent for the Room Code.")
-                .foregroundColor(.gray)
-            
-            TextField("Enter Code", text: $roomCode)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .font(.title)
-                .multilineTextAlignment(.center)
-                .textInputAutocapitalization(.characters)
-                .autocorrectionDisabled()
-            
-            if !errorMessage.isEmpty {
-                Text(errorMessage)
-                    .foregroundColor(.red)
-                    .font(.footnote)
-                    .multilineTextAlignment(.center)
-            }
-            
-            Button(action: {
-                Task {
-                    await joinFamilyRoom()
-                }
-            }) {
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.green)
-                        .cornerRadius(12)
-                } else {
-                    Text("Join")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                }
-            }
-            .disabled(isLoading || roomCode.isEmpty)
-            .navigationDestination(isPresented: $isJoined) {
-                ChildTaskView(token: childToken)
-            }
-            
-            Spacer()
-        }
-        .padding()
-        .navigationTitle("Child Setup")
-    }
-    
-    func joinFamilyRoom() async {
-        isLoading = true
-        errorMessage = ""
-        
-        guard let url = URL(string: "https://bokijonow.pythonanywhere.com/api/v1/join") else { return }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        let bodyParams: [String: String] = [
-            "code": roomCode
-        ]
-        
-        request.httpBody = try? JSONSerialization.data(withJSONObject: bodyParams)
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                errorMessage = "Invalid response from server"
-                isLoading = false
-                return
-            }
-            
-            if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let receivedToken = json["child_token"] as? String {
-
-                    // The child token never expires, so there is no refresh token.
-                    // It only stops working if the parent links a new device.
-                    KeychainSwift().set(receivedToken, forKey: "child_token")
-
-                    self.childToken = receivedToken
-                    self.isJoined = true
-                } else {
-                    errorMessage = "Failed to parse child token from response."
-                }
-            } else {
-                let serverError = String(data: data, encoding: .utf8) ?? "Unknown error"
-                errorMessage = "Error \(httpResponse.statusCode): \(serverError)"
-            }
-        } catch {
-            errorMessage = "Network error: \(error.localizedDescription)"
-        }
-        
-        isLoading = false
-    }
-}
-
 
 #Preview {
     OnboardingView()

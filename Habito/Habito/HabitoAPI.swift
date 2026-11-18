@@ -283,6 +283,16 @@ enum HabitoAPI {
         return parent
     }
 
+    // MARK: Child
+
+    /// The child's device joins a room with the parent's code and gets its device token.
+    /// A wrong code is a 404 `invalid_code`; too many tries is a 429.
+    static func join(code: String) async throws -> String {
+        struct Joined: Decodable { let childToken: String }
+        let data = try await open("POST", "/join", body: ["code": code])
+        return try decode(Joined.self, from: data).childToken
+    }
+
     // MARK: Tasks
 
     static func today() async throws -> [TaskItem] {

@@ -93,6 +93,19 @@ extension View {
 // MARK: - Buttons
 
 extension View {
+    /// A native capsule button with a text label: tinted Liquid Glass on iOS 26,
+    /// a filled capsule on earlier versions. Sized to its label, not full width.
+    @ViewBuilder
+    func habitoCapsuleButton() -> some View {
+        if #available(iOS 26, *) {
+            buttonStyle(.glassProminent).buttonBorderShape(.capsule).controlSize(.large).tint(.habitoGreen)
+        } else {
+            buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.large).tint(.habitoGreen)
+        }
+    }
+}
+
+extension View {
     /// The green button for + and the save check: tinted Liquid Glass on iOS 26,
     /// a round prominent button on earlier versions.
     @ViewBuilder

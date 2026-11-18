@@ -78,7 +78,7 @@ struct ChildTaskView: View {
     /// thing to do is go back to the start screen.
     func fetchTasks() async {
         isLoading = true
-        guard let url = URL(string: "https://bokijonow.pythonanywhere.com/api/v1/today") else { return }
+        guard let url = URL(string: "\(ParentAuth.baseURL)/today") else { return }
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"

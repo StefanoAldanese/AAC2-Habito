@@ -90,6 +90,22 @@ extension View {
     }
 }
 
+// MARK: - Glass
+
+extension View {
+    /// Liquid Glass on iOS 26; a translucent material on earlier versions.
+    @ViewBuilder
+    func habitoGlass<S: Shape>(in shape: S) -> some View {
+        if #available(iOS 26, *) {
+            glassEffect(.regular, in: shape)
+        } else {
+            background(.ultraThinMaterial, in: shape)
+                .overlay(shape.stroke(Color.white.opacity(0.6), lineWidth: 1))
+                .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+        }
+    }
+}
+
 // MARK: - Buttons
 
 extension View {

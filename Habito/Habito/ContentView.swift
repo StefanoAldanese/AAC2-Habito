@@ -23,10 +23,8 @@ struct ContentView: View {
     @ViewBuilder
     private var screen: some View {
         // 1. Check if a child is logged in
-        if let childToken = KeychainSwift().get("child_token") {
-            NavigationStack {
-                ChildTaskView(token: childToken)
-            }
+        if KeychainSwift().get(HabitoAPI.childTokenKey) != nil {
+            ChildRootView()
 
         // 2. Check if a parent is logged in
         } else if ParentAuth.accessToken != nil {

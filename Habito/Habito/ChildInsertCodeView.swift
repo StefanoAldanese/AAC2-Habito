@@ -15,8 +15,6 @@ struct ChildInsertCodeView: View {
     @State private var isBusy = false
     @State private var errorText: String?
     @State private var shakes = 0
-    @State private var isJoined = false
-    @State private var childToken = ""
     @FocusState private var isFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -58,9 +56,6 @@ struct ChildInsertCodeView: View {
         .animation(.easeOut(duration: 0.25), value: errorText)
         .background(HabitoBackground())
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(isPresented: $isJoined) {
-            ChildTaskView(token: childToken)
-        }
         .sensoryFeedback(.error, trigger: shakes)
         .onChange(of: code) { _, new in
             let cleaned = Self.clean(new)
@@ -161,11 +156,11 @@ struct ChildInsertCodeView: View {
             let token = try await HabitoAPI.join(code: code)
             // The child token never expires and has no refresh token. It only stops working if
             // the parent links a new device.
-            guard KeychainSwift().set(token, forKey: "child_token") else {
+            guard KeychainSwift().set(token, forKey: HabitoAPI.childTokenKey) else {
                 throw APIError(status: 0, code: "keychain", message: "Couldn’t save the login on this phone.")
             }
-            childToken = token
-            isJoined = true
+            // The token is in the Keychain: let ContentView swap to the child's screens.
+            ParentSession.refreshRoot()
         } catch {
             if error.isCancellation { return }
             show(message(for: error))

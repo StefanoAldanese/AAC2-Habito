@@ -51,7 +51,8 @@ struct TaskItem: Decodable, Identifiable, Equatable {
     var descriptionText: String { description ?? "" }
 }
 
-struct ParentToday: Decodable {
+/// GET /today: the day (in the parent's timezone) and the tasks due on it.
+struct TodayList: Decodable {
     let date: String
     let tasks: [TaskItem]
 }
@@ -285,6 +286,38 @@ enum HabitoAPI {
 
     // MARK: Child
 
+    static let childTokenKey = "child_token"
+
+    /// A call with the child's device token. Throws `APIError.signedOut` when the token is
+    /// missing or no longer valid (the parent's code was used on another device).
+    @discardableResult
+    private static func childCall(_ method: String, _ path: String) async throws -> Data {
+        guard let token = KeychainSwift().get(childTokenKey) else { throw APIError.signedOut }
+        var request = URLRequest(url: url(path))
+        request.httpMethod = method
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        if http.statusCode == 401 { throw APIError.signedOut }
+        guard (200..<300).contains(http.statusCode) else { throw failure(data, http) }
+        return data
+    }
+
+    /// Today's tasks, as the child's device sees them.
+    static func childToday() async throws -> TodayList {
+        try decode(TodayList.self, from: try await childCall("GET", "/today"))
+    }
+
+    /// Marks today's occurrence of a task done. A task that was already done counts as success.
+    static func markDone(id: String) async throws {
+        do {
+            try await childCall("POST", "/tasks/\(id)/done")
+        } catch let error as APIError where error.code == "already_done" {
+            return
+        }
+    }
+
     /// The child's device joins a room with the parent's code and gets its device token.
     /// A wrong code is a 404 `invalid_code`; too many tries is a 429.
     static func join(code: String) async throws -> String {
@@ -296,7 +329,7 @@ enum HabitoAPI {
     // MARK: Tasks
 
     static func today() async throws -> [TaskItem] {
-        try decode(ParentToday.self, from: try await call("GET", "/today")).tasks
+        try decode(TodayList.self, from: try await call("GET", "/today")).tasks
     }
 
     static func createTask(title: String, description: String, daily: Bool) async throws {

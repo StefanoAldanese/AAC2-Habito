@@ -13,7 +13,10 @@ import Foundation
 import KeychainSwift
 
 enum ParentAuth {
-    static let baseURL = "https://bokijonow.pythonanywhere.com/api/v1"
+    /// The live server. A HABITO_API_URL environment variable (set by the test
+    /// scripts, never in a shipped build) points the parent screens at a local one.
+    static let baseURL = ProcessInfo.processInfo.environment["HABITO_API_URL"]
+        ?? "https://bokijonow.pythonanywhere.com/api/v1"
 
     static let accessKey = "parent_access"
     static let refreshKey = "parent_refresh"

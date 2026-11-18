@@ -16,6 +16,3 @@ staticfiles/
 .idea/
 .vscode/
 .DS_Store
-
-# Claude Code local config
-.claude/

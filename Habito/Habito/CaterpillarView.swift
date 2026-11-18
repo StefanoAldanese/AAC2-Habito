@@ -1,0 +1,110 @@
+//
+//  CaterpillarView.swift
+//  Habito
+//
+//  The caterpillar and its moods, animation only: mouth open or closed, dizzy
+//  spiral eyes after a shake, a wobble while shaken and a happy squash after eating.
+//
+
+import SwiftUI
+
+struct CaterpillarView: View {
+    var mouthOpen: Bool
+    var dizzy: Bool
+    /// Changes on every shake: the body wobbles.
+    var wobble: Int
+    /// Changes on every apple eaten: the body squashes and bounces.
+    var chew: Int
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The eyes in the caterpillar picture (1012 x 512 pixels), as fractions of it.
+    /// (Written as decimals: whole-number literals here would pick CGRect's Int initialiser
+    /// and divide to zero.)
+    private static let eyes: [CGRect] = [
+        CGRect(x: 24.0 / 1012, y: 174.0 / 512, width: 72.0 / 1012, height: 102.0 / 512),
+        CGRect(x: 150.0 / 1012, y: 194.0 / 512, width: 80.0 / 1012, height: 104.0 / 512),
+    ]
+
+    var body: some View {
+        Image(mouthOpen ? "CaterpillarOpen" : "Caterpillar")
+            .resizable()
+            .overlay {
+                if dizzy {
+                    GeometryReader { proxy in
+                        ForEach(0..<Self.eyes.count, id: \.self) { index in
+                            let eye = Self.eyes[index]
+                            DizzyEye(clockwise: index == 0, still: reduceMotion)
+                                .frame(width: eye.width * proxy.size.width, height: eye.height * proxy.size.height)
+                                .position(x: eye.midX * proxy.size.width, y: eye.midY * proxy.size.height)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: dizzy)
+            .keyframeAnimator(initialValue: 0.0, trigger: reduceMotion ? 0 : wobble) { content, angle in
+                content.rotationEffect(.degrees(angle), anchor: UnitPoint(x: 0.4, y: 0.95))
+            } keyframes: { _ in
+                CubicKeyframe(-5, duration: 0.12)
+                CubicKeyframe(5, duration: 0.14)
+                CubicKeyframe(-4, duration: 0.14)
+                CubicKeyframe(3, duration: 0.14)
+                CubicKeyframe(-1.5, duration: 0.14)
+                CubicKeyframe(0, duration: 0.16)
+            }
+            .keyframeAnimator(initialValue: CGSize(width: 1, height: 1), trigger: chew) { content, scale in
+                content.scaleEffect(scale, anchor: UnitPoint(x: 0.3, y: 0.95))
+            } keyframes: { _ in
+                SpringKeyframe(CGSize(width: 1.04, height: 0.93), duration: 0.12)
+                SpringKeyframe(CGSize(width: 0.98, height: 1.05), duration: 0.14)
+                SpringKeyframe(CGSize(width: 1.02, height: 0.97), duration: 0.12)
+                SpringKeyframe(CGSize(width: 1, height: 1), duration: 0.2)
+            }
+            .accessibilityElement()
+            .accessibilityLabel("Caterpillar")
+            .accessibilityValue(dizzy ? "dizzy" : (mouthOpen ? "mouth open" : "smiling"))
+            .accessibilityIdentifier("caterpillar")
+    }
+}
+
+/// One dizzy eye: a white eye with a dark spiral turning in it.
+private struct DizzyEye: View {
+    let clockwise: Bool
+    let still: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let line = max(1.2, min(proxy.size.width, proxy.size.height) * 0.07)
+            TimelineView(.animation(paused: still)) { context in
+                let turns = context.date.timeIntervalSinceReferenceDate * 1.6
+                ZStack {
+                    Ellipse().fill(.white)
+                    Spiral()
+                        .stroke(Color(red: 0.07, green: 0.07, blue: 0.09), style: StrokeStyle(lineWidth: line, lineCap: .round))
+                        .padding(line * 0.9)
+                        .rotationEffect(.degrees((clockwise ? 1 : -1) * turns.truncatingRemainder(dividingBy: 1) * 360))
+                    Ellipse().stroke(Color(red: 0.07, green: 0.07, blue: 0.09), lineWidth: line * 0.9)
+                }
+            }
+        }
+    }
+}
+
+/// Three turns, from the middle out.
+private struct Spiral: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let turns = 3.0
+        let steps = 140
+        for step in 0...steps {
+            let t = Double(step) / Double(steps)
+            let angle = t * turns * 2 * .pi
+            let point = CGPoint(x: center.x + cos(angle) * t * rect.width / 2,
+                                y: center.y + sin(angle) * t * rect.height / 2)
+            if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        return path
+    }
+}

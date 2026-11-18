@@ -21,6 +21,13 @@ struct HomeView: View {
     @State private var pendingDelete: TaskItem?
     @State private var confirmLogOut = false
     @State private var actionError: String?
+    /// "Ali finished Make the bed", shown for a few seconds when the child eats an apple.
+    @State private var finished: String?
+    @State private var finishedID = 0
+    @State private var finishedCount = 0
+
+    /// How often Home checks for tasks the child finished, while it is on screen.
+    private static let pollInterval: Duration = .seconds(15)
 
     private var title: String {
         session.childName.isEmpty ? "Tasks" : "\(session.childName)’s Tasks"
@@ -85,6 +92,32 @@ struct HomeView: View {
         }
         .task { await load() }
         .task { await session.load() }
+        .task {
+            // While Home is on screen, keep up with the child's phone.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.pollInterval)
+                if Task.isCancelled { break }
+                if scenePhase == .active { await load() }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let finished {
+                Label(finished, systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.habitoGreenDeep)
+                    .lineLimit(2)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .habitoGlass(in: Capsule())
+                    .padding(.horizontal, 20)
+                    .padding(.top, 6)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .onTapGesture { self.finished = nil }
+                    .accessibilityAddTraits(.isStaticText)
+            }
+        }
+        .animation(.snappy, value: finished)
+        .sensoryFeedback(.success, trigger: finishedCount)
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await load() } }
         }
@@ -224,9 +257,29 @@ struct HomeView: View {
         await load()
     }
 
+    /// Tasks that were open on the last check and are done now: the child just finished them.
+    private func announceFinished(old: [TaskItem], new: [TaskItem]) {
+        let wasOpen = Set(old.filter { !$0.isDone }.map(\.id))
+        let justDone = new.filter { $0.isDone && wasOpen.contains($0.id) }
+        guard !justDone.isEmpty else { return }
+        let who = session.childName.isEmpty ? "Your child" : session.childName
+        finished = justDone.count == 1
+            ? "\(who) finished “\(justDone[0].title)”"
+            : "\(who) finished \(justDone.count) tasks"
+        finishedCount += 1
+        finishedID += 1
+        let id = finishedID
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(4))
+            if finishedID == id { finished = nil }
+        }
+        AccessibilityNotification.Announcement(finished ?? "").post()
+    }
+
     private func load() async {
         do {
             let fresh = try await HabitoAPI.today()
+            if loaded { announceFinished(old: tasks, new: fresh) }
             tasks = fresh
             loadError = nil
             if let id = expandedID, !fresh.contains(where: { $0.id == id }) { expandedID = nil }

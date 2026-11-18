@@ -2,10 +2,15 @@
 //  ChildTreeView.swift
 //  Habito
 //
-//  The child's main screen: the tree with one apple per task, the caterpillar
-//  in the corner and the progress bar on top. Tap an apple to hear the task and
-//  say "I did it!"; then drag the apple into the caterpillar's mouth, which marks
-//  the task done.
+//  The child's main screen, where the animations come together: the tree with
+//  one apple per task, the caterpillar in the corner and the progress bar on top.
+//
+//  - Tap an apple to hear its task.
+//  - Grab an apple to snap it off and carry it; near the caterpillar it opens its
+//    mouth. Drop it in to eat it, which marks the task done (ChildTreeModel).
+//  - Let go anywhere else, or throw it, and it falls away and regrows.
+//  - Shake the phone: dizzy caterpillar, rustling leaves, swinging apples, and new
+//    tasks grow in as new apples.
 //
 
 import SwiftUI
@@ -71,97 +76,94 @@ struct ChildTreeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var today: TodayList?
-    /// Apples the child said "I did it!" for: these can be dragged.
-    @State private var unlocked: Set<String> = []
+    @State private var model = ChildTreeModel()
+
+    // Interaction and animation state; the model never sees these.
     @State private var bubble: String?
     /// The apple in the child's hand, and where the finger is.
     @State private var carried: String?
     @State private var hand: CGPoint = .zero
-    /// The apple flying into the mouth while the server is told.
+    /// The apple going into the mouth while the server is told.
     @State private var eating: String?
     @State private var swallowing = false
+    @State private var falling: [FallingApple] = []
+    /// Apples that fell off: their spot stays empty until they regrow.
+    @State private var offTree: Set<String> = []
+    /// Set while a finger is on an apple; reset by the system if the drag is cancelled.
+    @GestureState private var dragging: String?
+    @State private var regrow: [String: Int] = [:]
+
+    @State private var shake = 0
+    @State private var lastShakeEffect = Date.distantPast
+    @State private var dizzy = false
+    @State private var dizzyToken = 0
+    @State private var chew = 0
+    @State private var snapped = 0
     @State private var fed = 0
-    @State private var unlockedFeedback = 0
+
     @State private var message: String?
     @State private var messageID = 0
-
-    /// Which apple hangs on which spot. A task keeps its spot all day; a task after the
-    /// tenth waits for a spot that an eaten apple left free.
-    private var hanging: [(task: TaskItem, spot: Int)] {
-        let all = today?.tasks ?? []
-        var result: [(task: TaskItem, spot: Int)] = []
-        var free: [Int] = []
-        for (index, task) in all.prefix(TreeLayout.spotCount).enumerated() {
-            if task.isDone { free.append(index) } else { result.append((task, index)) }
-        }
-        if all.count < TreeLayout.spotCount { free += Array(all.count..<TreeLayout.spotCount) }
-        free.sort()
-        for task in all.dropFirst(TreeLayout.spotCount) where !task.isDone {
-            guard !free.isEmpty else { break }
-            result.append((task, free.removeFirst()))
-        }
-        return result
-    }
 
     var body: some View {
         GeometryReader { proxy in
             let layout = TreeLayout(size: proxy.size)
             ZStack(alignment: .topLeading) {
                 scenery(layout)
-                ForEach(hanging, id: \.task.id) { item in
+                ForEach(model.hanging, id: \.task.id) { item in
                     apple(item.task, spot: item.spot, layout: layout)
                 }
                 caterpillar(layout)
-                if carried != nil || eating != nil {
-                    Image("Apple")
-                        .resizable()
-                        .frame(width: layout.apple.width, height: layout.apple.height)
-                        .scaleEffect(swallowing ? 0.25 : 1.45)
-                        .opacity(swallowing ? 0 : 1)
-                        .shadow(color: .black.opacity(0.3), radius: 6, y: 6)
-                        .position(hand)
-                        .allowsHitTesting(false)
-                }
+                fallingApples(layout)
+                inHand(layout)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .coordinateSpace(name: "tree")
         }
         .ignoresSafeArea()
-        .overlay(alignment: .top) {
-            VStack(spacing: 10) {
-                ChildProgressBar(steps: game.steps)
-                if let message {
-                    Text(message)
-                        .font(.subheadline.weight(.semibold))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .habitoGlass(in: Capsule())
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 4)
-            .animation(.snappy, value: message)
-        }
+        .overlay(alignment: .top) { topBar }
+        .overlay(alignment: .bottomLeading) { debugShakeButton }
         .task {
-            while !Task.isCancelled {
-                await load()
-                try? await Task.sleep(for: .seconds(60))
-            }
+            await reload()
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await load() } }
+            if phase == .active { Task { await reload() } }
         }
         .onChange(of: bubble) { _, new in
             if new == nil { Speaker.shared.stop() }
         }
+        .onChange(of: dragging) { _, new in
+            // The system cancelled the drag (a call, a system gesture): drop the apple.
+            guard new == nil, let id = carried, let task = model.openTasks.first(where: { $0.id == id }) else { return }
+            drop(task, at: hand, velocity: CGVector(dx: 0, dy: -80), screen: UIScreen.main.bounds.size)
+        }
+        .onShake { phase in
+            shaken()
+            if phase == .ended { Task { await refreshAfterShake() } }
+        }
+        .sensoryFeedback(.impact(weight: .light), trigger: snapped)
         .sensoryFeedback(.success, trigger: fed)
-        .sensoryFeedback(.impact(weight: .medium), trigger: unlockedFeedback)
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: shake)
     }
 
-    // MARK: Pieces
+    // MARK: Layers
+
+    private var topBar: some View {
+        VStack(spacing: 10) {
+            ChildProgressBar(steps: game.steps, today: model.todayFraction)
+            if let message {
+                Text(message)
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .habitoGlass(in: Capsule())
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .animation(.snappy, value: message)
+    }
 
     private func scenery(_ layout: TreeLayout) -> some View {
         ZStack(alignment: .topLeading) {
@@ -175,6 +177,30 @@ struct ChildTreeView: View {
             )
             placed("Backyard", in: layout.yard)
             placed("Tree", in: layout.tree)
+            // The leaf clumps again, over the tree, so they can rustle on their own.
+            placed("TreeLeaves", in: layout.tree)
+                .keyframeAnimator(initialValue: Rustle(), trigger: reduceMotion ? 0 : shake) { content, rustle in
+                    content
+                        .offset(x: rustle.x * layout.scale, y: rustle.y * layout.scale)
+                        .rotationEffect(.degrees(rustle.angle), anchor: UnitPoint(x: 0.5, y: 0.75))
+                } keyframes: { _ in
+                    KeyframeTrack(\.x) {
+                        CubicKeyframe(3.5, duration: 0.07); CubicKeyframe(-3, duration: 0.08)
+                        CubicKeyframe(2.8, duration: 0.08); CubicKeyframe(-2.4, duration: 0.08)
+                        CubicKeyframe(2, duration: 0.09); CubicKeyframe(-1.5, duration: 0.1)
+                        CubicKeyframe(1, duration: 0.12); CubicKeyframe(0, duration: 0.16)
+                    }
+                    KeyframeTrack(\.y) {
+                        CubicKeyframe(-1.5, duration: 0.09); CubicKeyframe(1.2, duration: 0.09)
+                        CubicKeyframe(-1, duration: 0.1); CubicKeyframe(0.8, duration: 0.11)
+                        CubicKeyframe(0, duration: 0.2)
+                    }
+                    KeyframeTrack(\.angle) {
+                        CubicKeyframe(1.2, duration: 0.12); CubicKeyframe(-1, duration: 0.14)
+                        CubicKeyframe(0.7, duration: 0.14); CubicKeyframe(-0.4, duration: 0.16)
+                        CubicKeyframe(0, duration: 0.2)
+                    }
+                }
             placed("BackyardFront", in: layout.front)
         }
         .allowsHitTesting(false)
@@ -189,136 +215,245 @@ struct ChildTreeView: View {
     }
 
     private func caterpillar(_ layout: TreeLayout) -> some View {
-        Image(carried != nil || eating != nil ? "CaterpillarOpen" : "Caterpillar")
-            .resizable()
+        CaterpillarView(mouthOpen: mouthOpen(layout), dizzy: dizzy, wobble: shake, chew: chew)
             .frame(width: layout.caterpillarSize.width, height: layout.caterpillarSize.height)
             .rotationEffect(.degrees(20), anchor: UnitPoint(x: 0.16, y: 0.6))
             .position(layout.caterpillarCenter)
             .allowsHitTesting(false)
-            .accessibilityHidden(true)
+    }
+
+    /// The mouth opens while an apple is carried close, and while it is eaten.
+    private func mouthOpen(_ layout: TreeLayout) -> Bool {
+        if eating != nil { return true }
+        guard carried != nil else { return false }
+        return distance(hand, layout.mouth) < Reach.open * layout.scale
     }
 
     private func apple(_ task: TaskItem, spot: Int, layout: TreeLayout) -> some View {
-        let isUnlocked = unlocked.contains(task.id)
-        let isAway = carried == task.id || eating == task.id
         let home = layout.spot(spot)
-        return Image("Apple")
-            .resizable()
-            .frame(width: layout.apple.width, height: layout.apple.height)
-            .shadow(color: isUnlocked ? .white : .clear, radius: 4)
-            .shadow(color: isUnlocked ? Color.habitoGreen.opacity(0.9) : .black.opacity(0.25), radius: isUnlocked ? 9 : 1.5, y: isUnlocked ? 0 : 1)
-            .phaseAnimator([0.0, -7.0, 7.0]) { content, angle in
-                // An unlocked apple keeps swinging on its stalk: "pick me".
-                content.rotationEffect(.degrees(isUnlocked && !reduceMotion ? angle : 0), anchor: .top)
-            } animation: { _ in .easeInOut(duration: 0.45) }
-            .frame(width: max(56, layout.apple.width + 18), height: max(56, layout.apple.height + 18))
-            .contentShape(Rectangle())
-            .opacity(isAway ? 0 : 1)
-            .onTapGesture { bubble = task.id }
-            .gesture(drag(task, home: home, layout: layout), including: isUnlocked && eating == nil ? .all : .none)
-            .popover(
-                isPresented: Binding(get: { bubble == task.id }, set: { if !$0, bubble == task.id { bubble = nil } }),
-                attachmentAnchor: .rect(.bounds),
-                arrowEdge: .top
-            ) {
-                TaskBubble(task: task, isUnlocked: isUnlocked) { unlock(task) }
-            }
-            .position(home)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Apple: \(task.title)")
-            .accessibilityHint(isUnlocked ? "Drag it to the caterpillar to feed it" : "Opens the task")
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction(named: "Feed the caterpillar") {
-                if isUnlocked, eating == nil { feed(task, mouth: layout.mouth) }
-            }
-    }
-
-    private func drag(_ task: TaskItem, home: CGPoint, layout: TreeLayout) -> some Gesture {
-        DragGesture(minimumDistance: 4, coordinateSpace: .named("tree"))
-            .onChanged { value in
-                if carried == nil {
-                    bubble = nil
-                    carried = task.id
-                }
-                hand = value.location
-            }
-            .onEnded { value in
-                let distance = hypot(value.location.x - layout.mouth.x, value.location.y - layout.mouth.y)
-                if distance < 95 * layout.scale {
-                    feed(task, mouth: layout.mouth)
-                } else {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                        hand = home
-                    } completion: {
-                        if carried == task.id { carried = nil }
-                    }
-                }
-            }
-    }
-
-    // MARK: Actions
-
-    private func unlock(_ task: TaskItem) {
-        unlocked.insert(task.id)
-        unlockedFeedback += 1
-        bubble = nil
-        show("Now feed the apple to the caterpillar!")
-    }
-
-    private func feed(_ task: TaskItem, mouth: CGPoint) {
-        eating = task.id
-        carried = nil
-        withAnimation(.easeIn(duration: 0.25)) {
-            hand = mouth
-            swallowing = true
-        } completion: {
-            Task { await tellServer(task) }
+        let away = carried == task.id || eating == task.id || offTree.contains(task.id)
+        return AppleView(
+            size: layout.apple,
+            swing: shake,
+            swingStrength: 0.75 + Double((spot * 37) % 50) / 100,
+            regrow: regrow[task.id, default: 0],
+            hidden: away,
+            growsSlowly: model.arrivals.contains(task.id),
+            onGrown: { model.arrived(task.id) }
+        )
+        .frame(width: max(56, layout.apple.width + 18), height: max(56, layout.apple.height + 18))
+        .contentShape(Rectangle())
+        .onTapGesture { bubble = task.id }
+        // Never switch the drag off while it runs: that would cancel it mid-way.
+        .gesture(drag(task, home: home, layout: layout), including: eating == nil ? .all : .none)
+        .popover(
+            isPresented: Binding(get: { bubble == task.id }, set: { if !$0, bubble == task.id { bubble = nil } }),
+            attachmentAnchor: .rect(.bounds),
+            arrowEdge: .top
+        ) {
+            TaskBubble(task: task)
+        }
+        .position(home)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Apple: \(task.title)")
+        .accessibilityValue(away ? "Off the tree" : "On the tree")
+        .accessibilityHint("Drag it to the caterpillar when the task is done")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Feed the caterpillar") {
+            if eating == nil { eat(task, from: home, mouth: layout.mouth) }
         }
     }
 
-    private func tellServer(_ task: TaskItem) async {
-        do {
-            try await HabitoAPI.markDone(id: task.id)
-            unlocked.remove(task.id)
-            fed += 1
-            await load()
-        } catch {
-            if (error as? APIError)?.isSignedOut == true { signOut(); return }
-            switch (error as? APIError)?.code {
-            case "not_due_today":
-                show("This task isn’t for today any more.")
-                await load()
-            case "not_found":
-                show("This task was removed.")
-                await load()
-            default:
-                show(error.habitoMessage)
+    /// The apple following the finger, and the one going into the mouth.
+    @ViewBuilder
+    private func inHand(_ layout: TreeLayout) -> some View {
+        if carried != nil || eating != nil {
+            Image("Apple")
+                .resizable()
+                .frame(width: layout.apple.width, height: layout.apple.height)
+                .scaleEffect(swallowing ? 0.2 : 1.45)
+                .opacity(swallowing ? 0 : 1)
+                .shadow(color: .black.opacity(0.3), radius: 6, y: 6)
+                .position(hand)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func fallingApples(_ layout: TreeLayout) -> some View {
+        TimelineView(.animation(paused: falling.isEmpty)) { context in
+            ZStack(alignment: .topLeading) {
+                ForEach(falling) { apple in
+                    Image("Apple")
+                        .resizable()
+                        .frame(width: layout.apple.width * 1.3, height: layout.apple.height * 1.3)
+                        .rotationEffect(.degrees(apple.angle(at: context.date)))
+                        .position(apple.position(at: context.date))
+                }
             }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var debugShakeButton: some View {
+        #if DEBUG
+        // UI tests cannot shake the simulator; this lets them. Never in a release build.
+        if ProcessInfo.processInfo.environment["HABITO_TEST_SHAKE"] == "1" {
+            Button("Test shake") {
+                NotificationCenter.default.post(name: .habitoShakeBegan, object: nil)
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(400))
+                    NotificationCenter.default.post(name: .habitoShakeEnded, object: nil)
+                }
+            }
+            .font(.caption2)
+            .opacity(0.02)
+            .padding(30)
+            .accessibilityIdentifier("debugShake")
+        }
+        #endif
+    }
+
+    // MARK: Drag and drop
+
+    private enum Reach {
+        /// The mouth opens when the apple is this close (in design points).
+        static let open: CGFloat = 150
+        /// Dropped this close, the apple is eaten.
+        static let eat: CGFloat = 95
+        /// Let go faster than this (points per second) and the apple is thrown.
+        static let throwSpeed: CGFloat = 700
+    }
+
+    private func drag(_ task: TaskItem, home: CGPoint, layout: TreeLayout) -> some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named("tree"))
+            .updating($dragging) { _, state, _ in state = task.id }
+            .onChanged { value in
+                if carried == nil {
+                    bubble = nil
+                    snapped += 1
+                    hand = home
+                    carried = task.id
+                    withAnimation(.spring(response: 0.18, dampingFraction: 0.7)) { hand = value.location }
+                } else {
+                    hand = value.location
+                }
+            }
+            .onEnded { value in
+                if distance(value.location, layout.mouth) < Reach.eat * layout.scale {
+                    eat(task, from: value.location, mouth: layout.mouth)
+                } else {
+                    let speed = hypot(value.velocity.width, value.velocity.height)
+                    let thrown = speed > Reach.throwSpeed
+                    let velocity = thrown
+                        ? CGVector(dx: value.velocity.width.clamped(-3200, 3200), dy: value.velocity.height.clamped(-3200, 3200))
+                        : CGVector(dx: Double.random(in: -60...60), dy: -80)
+                    drop(task, at: value.location, velocity: velocity, screen: layout.size)
+                }
+            }
+    }
+
+    /// Let go away from the mouth: the apple falls out of the screen and regrows on its spot.
+    private func drop(_ task: TaskItem, at point: CGPoint, velocity: CGVector, screen: CGSize) {
+        offTree.insert(task.id)
+        carried = nil
+        let apple = FallingApple(taskID: task.id, start: point, velocity: velocity,
+                                 spin: Double.random(in: 200...420) * (velocity.dx < 0 ? -1 : 1), startDate: .now)
+        falling.append(apple)
+        // Wait until it has left the screen, and a beat longer, before it grows back.
+        let leave = max(0.8, apple.timeToLeave(screen))
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(leave))
+            falling.removeAll { $0.id == apple.id }
+            offTree.remove(task.id)
+            regrow[task.id, default: 0] += 1
+        }
+    }
+
+    /// Dropped on the mouth: the apple goes in, then the model tells the server.
+    private func eat(_ task: TaskItem, from point: CGPoint, mouth: CGPoint) {
+        bubble = nil
+        hand = point
+        eating = task.id
+        carried = nil
+        withAnimation(.easeIn(duration: 0.22)) {
+            hand = mouth
+            swallowing = true
+        } completion: {
+            Task { await finishEating(task) }
+        }
+    }
+
+    private func finishEating(_ task: TaskItem) async {
+        let outcome = await model.complete(task)
+        switch outcome {
+        case .done:
+            chew += 1
+            fed += 1
+            if let today = model.todayList { game.record(today) }
+        case .gone(let text):
+            show(text)
+        case .failed(let text):
+            show(text)
+            regrow[task.id, default: 0] += 1
+        case .signedOut:
+            signOut()
+            return
         }
         eating = nil
         swallowing = false
     }
 
-    private func load() async {
-        do {
-            let fresh = try await HabitoAPI.childToday()
-            today = fresh
-            game.record(fresh)
-            let open = Set(fresh.tasks.filter { !$0.isDone }.map(\.id))
-            unlocked.formIntersection(open)
-            if let bubble, !open.contains(bubble) { self.bubble = nil }
-        } catch {
-            if (error as? APIError)?.isSignedOut == true { signOut(); return }
-            if error.isCancellation { return }
-            if today == nil { show(error.habitoMessage) }
+    // MARK: Shake
+
+    /// The look of a shake. Runs at most every 0.8 seconds however hard the phone is shaken.
+    private func shaken() {
+        let now = Date()
+        guard now.timeIntervalSince(lastShakeEffect) > 0.8 else { return }
+        lastShakeEffect = now
+        bubble = nil
+        shake += 1
+        dizzyToken += 1
+        let token = dizzyToken
+        dizzy = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.8))
+            if dizzyToken == token { dizzy = false }
         }
+    }
+
+    /// Fetching new tasks after a shake. The model skips it when one ran moments ago.
+    private func refreshAfterShake() async {
+        let before = model.openTasks.count
+        guard let stillJoined = await model.refreshAfterShake() else { return }
+        guard stillJoined else { signOut(); return }
+        if let today = model.todayList { game.record(today) }
+        let added = model.arrivals.count
+        if model.loadError == nil, added > 0 {
+            show(added == 1 ? "A new apple is growing!" : "\(added) new apples are growing!")
+        } else if model.openTasks.count == before {
+            show("No new tasks yet.")
+        }
+    }
+
+    // MARK: Helpers
+
+    private func reload() async {
+        guard await model.load() else { signOut(); return }
+        if let today = model.todayList { game.record(today) }
+        if let error = model.loadError { show(error) }
+    }
+
+    private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        hypot(a.x - b.x, a.y - b.y)
     }
 
     private func show(_ text: String) {
         messageID += 1
         let id = messageID
         message = text
-        Task {
+        Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
             if messageID == id { message = nil }
         }
@@ -331,12 +466,21 @@ struct ChildTreeView: View {
     }
 }
 
+/// How far the leaf clumps are pushed during a shake.
+private struct Rustle {
+    var x: CGFloat = 0
+    var y: CGFloat = 0
+    var angle: Double = 0
+}
+
+private extension CGFloat {
+    func clamped(_ low: CGFloat, _ high: CGFloat) -> CGFloat { Swift.min(high, Swift.max(low, self)) }
+}
+
 // MARK: - The bubble from an apple
 
 private struct TaskBubble: View {
     let task: TaskItem
-    let isUnlocked: Bool
-    let onDone: () -> Void
 
     private var spoken: String {
         task.descriptionText.isEmpty ? task.title : "\(task.title). \(task.descriptionText)"
@@ -357,30 +501,17 @@ private struct TaskBubble: View {
             Button { Speaker.shared.say(spoken) } label: {
                 Label("Read aloud", systemImage: "speaker.wave.2.fill")
                     .font(.headline)
-                    .foregroundStyle(Color.habitoGreenDeep)
+                    .foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 48)
-                    .background(Color.habitoGreen.opacity(0.16), in: Capsule())
+                    .background(Color.habitoGreen, in: Capsule())
             }
             .buttonStyle(.plain)
             .padding(.top, 14)
-
-            if isUnlocked {
-                Label("Now drag the apple to the caterpillar!", systemImage: "hand.draw.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.habitoGreenDeep)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 12)
-            } else {
-                Button(action: onDone) {
-                    Text("I did it!")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(Color.habitoGreen, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 10)
-            }
+            Label("Done? Pull the apple off and feed it to the caterpillar.", systemImage: "hand.draw.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.habitoGreenDeep)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 12)
         }
         .padding(18)
         .frame(width: 300, alignment: .leading)
@@ -390,9 +521,12 @@ private struct TaskBubble: View {
 
 // MARK: - Progress bar
 
-/// Seven perfect days turn the caterpillar into a butterfly.
+/// Seven perfect days turn the caterpillar into a butterfly. Today's step fills as
+/// apples are eaten.
 struct ChildProgressBar: View {
     let steps: Int
+    /// Today's share of tasks done, 0 to 1.
+    var today: Double = 0
     private let goal = ChildGame.daysPerButterfly
 
     private var isFull: Bool { steps >= goal }
@@ -424,9 +558,7 @@ struct ChildProgressBar: View {
                 }
                 HStack(spacing: 4) {
                     ForEach(0..<goal, id: \.self) { index in
-                        Capsule()
-                            .fill(index < steps ? Color.habitoGreen : Color.primary.opacity(0.16))
-                            .frame(height: 8)
+                        segment(fill: index < steps ? 1 : (index == steps ? min(max(today, 0), 0.999) : 0))
                     }
                 }
             }
@@ -448,7 +580,23 @@ struct ChildProgressBar: View {
         .frame(maxWidth: 420)
         .habitoGlass(in: Capsule())
         .animation(.snappy, value: steps)
+        .animation(.easeOut(duration: 0.6), value: today)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title). \(steps) of \(goal) perfect days.")
+        .accessibilityValue(today > 0 && !isFull ? "Today \(Int((today * 100).rounded())) percent done" : "")
+    }
+
+    private func segment(fill: Double) -> some View {
+        Capsule()
+            .fill(Color.primary.opacity(0.16))
+            .overlay(alignment: .leading) {
+                GeometryReader { proxy in
+                    Capsule()
+                        .fill(Color.habitoGreen)
+                        .frame(width: fill > 0 ? max(proxy.size.height, proxy.size.width * fill) : 0)
+                }
+            }
+            .clipShape(Capsule())
+            .frame(height: 8)
     }
 }

@@ -22,8 +22,8 @@ struct CaterpillarView: View {
     /// (Written as decimals: whole-number literals here would pick CGRect's Int initialiser
     /// and divide to zero.)
     private static let eyes: [CGRect] = [
-        CGRect(x: 24.0 / 1012, y: 174.0 / 512, width: 72.0 / 1012, height: 102.0 / 512),
-        CGRect(x: 150.0 / 1012, y: 194.0 / 512, width: 80.0 / 1012, height: 104.0 / 512),
+        CGRect(x: 30.0 / 1012, y: 174.0 / 512, width: 76.0 / 1012, height: 104.0 / 512),
+        CGRect(x: 158.0 / 1012, y: 194.0 / 512, width: 84.0 / 1012, height: 106.0 / 512),
     ]
 
     var body: some View {
@@ -78,14 +78,15 @@ private struct DizzyEye: View {
             let line = max(1.2, min(proxy.size.width, proxy.size.height) * 0.07)
             TimelineView(.animation(paused: still)) { context in
                 let turns = context.date.timeIntervalSinceReferenceDate * 1.6
+                let rotation = (clockwise ? 1.0 : -1.0) * turns.truncatingRemainder(dividingBy: 1) * 2 * .pi
                 ZStack {
                     Ellipse().fill(.white)
-                    Spiral()
+                    Spiral(rotation: rotation)
                         .stroke(Color(red: 0.07, green: 0.07, blue: 0.09), style: StrokeStyle(lineWidth: line, lineCap: .round))
                         .padding(line * 0.9)
-                        .rotationEffect(.degrees((clockwise ? 1 : -1) * turns.truncatingRemainder(dividingBy: 1) * 360))
                     Ellipse().stroke(Color(red: 0.07, green: 0.07, blue: 0.09), lineWidth: line * 0.9)
                 }
+                .clipShape(Ellipse())
             }
         }
     }
@@ -93,6 +94,8 @@ private struct DizzyEye: View {
 
 /// Three turns, from the middle out.
 private struct Spiral: Shape {
+    var rotation: Double
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let center = CGPoint(x: rect.midX, y: rect.midY)
@@ -100,7 +103,7 @@ private struct Spiral: Shape {
         let steps = 140
         for step in 0...steps {
             let t = Double(step) / Double(steps)
-            let angle = t * turns * 2 * .pi
+            let angle = t * turns * 2 * .pi + rotation
             let point = CGPoint(x: center.x + cos(angle) * t * rect.width / 2,
                                 y: center.y + sin(angle) * t * rect.height / 2)
             if step == 0 { path.move(to: point) } else { path.addLine(to: point) }

@@ -17,39 +17,40 @@ struct ChildButterfliesView: View {
     private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 28) {
-                    if game.butterflies == 0 {
-                        empty
-                    } else {
-                        LazyVGrid(columns: columns, spacing: 16) {
-                            ForEach(Array((0..<game.butterflies).reversed()), id: \.self) { number in
-                                card(number)
+            NavigationStack {
+                ScrollView {
+                    VStack(spacing: 28) {
+                        if game.butterflies == 0 {
+                            empty
+                        } else {
+                            LazyVGrid(columns: columns, spacing: 16) {
+                                ForEach(Array((0..<game.butterflies).reversed()), id: \.self) { number in
+                                    card(number)
+                                }
                             }
                         }
+                        Button("Leave this family", role: .destructive) { confirmLeave = true }
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(Color.habitoRed)
+                            .padding(.bottom, 8)
                     }
-                    Button("Leave this family", role: .destructive) { confirmLeave = true }
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(Color.habitoRed)
-                        .padding(.bottom, 8)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
+                    .frame(maxWidth: 640)
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 24)
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
-            }
-            .background(ChildSky())
-            .navigationTitle("Butterflies")
-            .confirmationDialog("Leave this family?", isPresented: $confirmLeave, titleVisibility: .visible) {
-                Button("Leave", role: .destructive) { leave() }
-            } message: {
-                Text("You will need the family code again to come back. Your butterflies stay on this phone.")
+                .background(ChildSky())
+                .navigationTitle("Butterflies")
+                .alert("Leave this family?", isPresented: $confirmLeave) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Leave", role: .destructive) { leave() }
+                } message: {
+                    Text("You will need the family code again to come back. Your butterflies stay on this phone.")
+                }
             }
         }
-    }
-
+    
     private var empty: some View {
         VStack(spacing: 6) {
             Image("TabButterfly")

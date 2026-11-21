@@ -134,7 +134,8 @@ struct HomeView: View {
         } message: { _ in
             Text("Days already in History stay as they are.")
         }
-        .confirmationDialog("Log out of Habito?", isPresented: $confirmLogOut, titleVisibility: .visible) {
+        .alert("Log out of Habito?", isPresented: $confirmLogOut) {
+            Button("Cancel", role: .cancel) {}
             Button("Log out", role: .destructive) { Task { await session.logOut() } }
         }
         .alert(

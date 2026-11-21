@@ -55,8 +55,8 @@ struct HistoryView: View {
                             DayCard(day: day)
                         }
                         if canLoadMore && !days.isEmpty {
-                            ProgressView()
-                                .padding(.vertical, 12)
+                            Color.clear
+                                .frame(height: 1)
                                 .onAppear { Task { await loadMore() } }
                         }
                     }
@@ -70,7 +70,9 @@ struct HistoryView: View {
             .background(HabitoBackground())
             .navigationTitle("History")
             .navigationBarTitleDisplayMode(.large)
-            .refreshable { await load() }
+            .refreshable {
+                await Task { await load() }.value
+            }
         }
         .task { await load() }
         .onChange(of: scenePhase) { _, phase in

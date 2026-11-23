@@ -105,32 +105,38 @@ final class ChildGame {
     }
 }
 
-/// One kind of butterfly. The caterpillar turns into them in this order, then starts over.
+/// One kind of butterfly. The caterpillar turns into them in this order, from the common
+/// ones to the legendary one, then starts over.
 struct ButterflyKind {
+    enum Rarity: String {
+        case common = "Common", rare = "Rare", epic = "Epic", legendary = "Legendary"
+    }
+
     let name: String
     let latin: String
+    let rarity: Rarity
     let about: String
     let image: String
 
     static let all: [ButterflyKind] = [
-        ButterflyKind(name: "Monarch", latin: "Danaus plexippus",
+        ButterflyKind(name: "Monarch", latin: "Danaus plexippus", rarity: .common,
                       about: "Monarchs fly thousands of kilometres every autumn, from Canada all the way to Mexico. Their caterpillars eat only milkweed, which makes them taste bad to birds.",
                       image: "Butterfly-monarch"),
-        ButterflyKind(name: "Swallowtail", latin: "Papilio machaon",
+        ButterflyKind(name: "Swallowtail", latin: "Papilio machaon", rarity: .common,
                       about: "Swallowtails are named after the two little tails on their back wings, which look like the tail of a swallow. Their caterpillars are green with black bands and orange dots.",
                       image: "Butterfly-swallowtail"),
-        ButterflyKind(name: "Blue Morpho", latin: "Morpho menelaus",
-                      about: "The bright blue of a morpho is not paint: tiny scales on its wings bend the light. Underneath, its wings are brown, so it seems to vanish when it closes them.",
-                      image: "Butterfly-morpho"),
-        ButterflyKind(name: "Peacock", latin: "Aglais io",
+        ButterflyKind(name: "Peacock", latin: "Aglais io", rarity: .rare,
                       about: "The big eye spots on a peacock butterfly scare birds away. When it is in danger, it flashes them open and even makes a hissing sound with its wings.",
                       image: "Butterfly-peacock"),
-        ButterflyKind(name: "Brimstone", latin: "Gonepteryx rhamni",
+        ButterflyKind(name: "Brimstone", latin: "Gonepteryx rhamni", rarity: .rare,
                       about: "Brimstones are among the first butterflies of spring, and they can live for about a year, much longer than most butterflies. Their leaf-shaped wings hide them among leaves.",
                       image: "Butterfly-brimstone"),
-        ButterflyKind(name: "Purple Emperor", latin: "Apatura iris",
+        ButterflyKind(name: "Purple Emperor", latin: "Apatura iris", rarity: .epic,
                       about: "The purple emperor lives high in the treetops of old woods. Only the males shine purple, and only when the light hits their wings from the right angle.",
                       image: "Butterfly-emperor"),
+        ButterflyKind(name: "Blue Morpho", latin: "Morpho menelaus", rarity: .legendary,
+                      about: "The bright blue of a morpho is not paint: tiny scales on its wings bend the light. Underneath, its wings are brown, so it seems to vanish when it closes them.",
+                      image: "Butterfly-morpho"),
     ]
 
     /// The kind of the child's butterfly number `number` (counting from 0).

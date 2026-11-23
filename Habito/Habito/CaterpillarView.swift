@@ -18,12 +18,12 @@ struct CaterpillarView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// The eyes in the caterpillar picture (1012 x 512 pixels), as fractions of it.
+    /// The eyes in the caterpillar picture (1933 x 803 pixels in the drawing), as fractions of it.
     /// (Written as decimals: whole-number literals here would pick CGRect's Int initialiser
     /// and divide to zero.)
     private static let eyes: [CGRect] = [
-        CGRect(x: 30.0 / 1012, y: 174.0 / 512, width: 76.0 / 1012, height: 104.0 / 512),
-        CGRect(x: 158.0 / 1012, y: 194.0 / 512, width: 84.0 / 1012, height: 106.0 / 512),
+        CGRect(x: 138.0 / 1933, y: 324.0 / 803, width: 172.0 / 1933, height: 302.0 / 803),
+        CGRect(x: 436.0 / 1933, y: 324.0 / 803, width: 172.0 / 1933, height: 304.0 / 803),
     ]
 
     var body: some View {
@@ -54,7 +54,7 @@ struct CaterpillarView: View {
                 CubicKeyframe(0, duration: 0.16)
             }
             .keyframeAnimator(initialValue: CGSize(width: 1, height: 1), trigger: chew) { content, scale in
-                content.scaleEffect(scale, anchor: UnitPoint(x: 0.3, y: 0.95))
+                content.scaleEffect(scale, anchor: UnitPoint(x: 0.2, y: 0.95))
             } keyframes: { _ in
                 SpringKeyframe(CGSize(width: 1.04, height: 0.93), duration: 0.12)
                 SpringKeyframe(CGSize(width: 0.98, height: 1.05), duration: 0.14)

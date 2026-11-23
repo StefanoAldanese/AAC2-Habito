@@ -3,14 +3,14 @@
 //  Habito
 //
 //  The child's main screen, where the animations come together: the tree with
-//  one apple per task, the caterpillar in the corner and the progress bar on top.
+//  one apple per task, the caterpillar on its leaf and the progress bar on top.
 //
 //  - Tap an apple to hear its task. "I did it!" marks the task done on the server
 //    (ChildTreeModel) and the apple turns ripe.
 //  - Grab a ripe apple to snap it off and carry it; near the caterpillar it opens
 //    its mouth. Drop it in to feed it. Locked apples stay on the tree.
 //  - Let go anywhere else, or throw it, and it falls away and regrows.
-//  - Shake the phone: dizzy caterpillar, rustling leaves, swinging apples, and new
+//  - Shake the phone: dizzy caterpillar, swaying tree, swinging apples, and new
 //    tasks grow in as new apples.
 //
 
@@ -19,16 +19,19 @@ import KeychainSwift
 
 // MARK: - Layout
 
-/// Where things sit. Drawn for a 402 x 874 point phone, scaled to fit the screen and
-/// anchored to its bottom, so the grass always reaches the bottom edge.
+/// Where things sit. Drawn for a 402 x 870 point phone (the garden picture), scaled to fit
+/// the screen and anchored to its bottom, so the grass always reaches the bottom edge.
+/// Above and beside the picture, plain sky and grass colours carry on.
 struct TreeLayout {
     let size: CGSize
 
-    var scale: CGFloat { min(size.width / 402, size.height / 874) }
-    private var left: CGFloat { (size.width - 402 * scale) / 2 }
-    private var top: CGFloat { size.height - 874 * scale }
+    static let design = CGSize(width: 402, height: 870)
 
-    /// A point of the 402 x 874 design, on this screen.
+    var scale: CGFloat { min(size.width / Self.design.width, size.height / Self.design.height) }
+    private var left: CGFloat { (size.width - Self.design.width * scale) / 2 }
+    private var top: CGFloat { size.height - Self.design.height * scale }
+
+    /// A point of the 402 x 870 design, on this screen.
     func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
         CGPoint(x: left + x * scale, y: top + y * scale)
     }
@@ -37,37 +40,30 @@ struct TreeLayout {
         CGRect(origin: point(x, y), size: CGSize(width: width * scale, height: height * scale))
     }
 
-    /// The backyard picture spans design x -800 to 1202, so wide screens stay covered.
-    var yard: CGRect { rect(-800, 0, 2002, 874) }
-    var front: CGRect { rect(0, 0, 402, 874) }
-    var tree: CGRect { rect(-99, 56, 600, 600 * 909 / 840) }
+    /// Sky, bushes, hill, plants and the leaf: one picture.
+    var scenery: CGRect { rect(0, 0, 402, 870) }
+    var tree: CGRect { rect(39, 117.17, 320.6, 416.4) }
+    /// Where the hill meets the sky, for the colour beside a picture narrower than the screen.
+    var horizon: CGFloat { point(0, 431).y }
 
-    /// Where the sky turns white: just above the fence.
-    var skyEnd: CGFloat { min(1, max(0.3, point(0, 600).y / max(size.height, 1))) }
-
-    /// The ten apple spots, taken from the apple picture of the tree (1680 pixels wide,
-    /// drawn here 600 points wide).
-    private static let spots: [(Double, Double)] = [
-        (803, 501), (1202, 645), (520, 622), (657, 1047), (1116, 776),
-        (394, 859), (1011, 493), (1166, 984), (1234, 779), (988, 929),
+    /// The ten apple spots on the tree's leaves, in design points.
+    private static let spots: [(CGFloat, CGFloat)] = [
+        (150, 160), (240, 150), (300, 200), (95, 215), (185, 205),
+        (325, 265), (120, 280), (255, 255), (75, 325), (300, 320),
     ]
     static let spotCount = spots.count
 
     func spot(_ index: Int) -> CGPoint {
         let (x, y) = Self.spots[index]
-        return point(-99 + x * 600 / 1680, 56 + y * 600 / 1680)
+        return point(x, y)
     }
 
-    var apple: CGSize { CGSize(width: 38 * scale, height: 31 * scale) }
+    var apple: CGSize { CGSize(width: 34 * scale, height: 40.6 * scale) }
 
-    /// The caterpillar hugs the screen's right edge: 560 x 283 points, its left edge 197
-    /// points in from the right, its top 354 points above the bottom, turned 20 degrees.
-    var caterpillarSize: CGSize { CGSize(width: 560 * scale, height: 283 * scale) }
-    var caterpillarCenter: CGPoint {
-        CGPoint(x: size.width - 197 * scale + 280 * scale, y: size.height - 354 * scale + 141.5 * scale)
-    }
+    /// The caterpillar lies on the leaf at the bottom, its head on the left.
+    var caterpillar: CGRect { rect(53.57, 590.86, 312.83, 129.95) }
     /// The middle of its open mouth.
-    var mouth: CGPoint { CGPoint(x: size.width - 131.7 * scale, y: size.height - 185.4 * scale) }
+    var mouth: CGPoint { point(113.6, 700) }
 }
 
 // MARK: - Screen
@@ -174,41 +170,23 @@ struct ChildTreeView: View {
 
     private func scenery(_ layout: TreeLayout) -> some View {
         ZStack(alignment: .topLeading) {
-            LinearGradient(
-                stops: [
-                    .init(color: Color(red: 0.827, green: 0.922, blue: 0.984), location: 0),
-                    .init(color: Color(red: 0.918, green: 0.965, blue: 0.996), location: layout.skyEnd * 0.55),
-                    .init(color: .white, location: layout.skyEnd),
-                ],
-                startPoint: .top, endPoint: .bottom
-            )
-            placed("Backyard", in: layout.yard)
+            VStack(spacing: 0) {
+                Color.gardenSky.frame(height: max(0, layout.horizon))
+                Color.gardenGrass
+            }
+            placed("Scenery", in: layout.scenery)
+            // The whole tree sways from its roots when the phone is shaken.
             placed("Tree", in: layout.tree)
-            // The leaf clumps again, over the tree, so they can rustle on their own.
-            placed("TreeLeaves", in: layout.tree)
                 .keyframeAnimator(initialValue: Rustle(), trigger: reduceMotion ? 0 : shake) { content, rustle in
-                    content
-                        .offset(x: rustle.x * layout.scale, y: rustle.y * layout.scale)
-                        .rotationEffect(.degrees(rustle.angle), anchor: UnitPoint(x: 0.5, y: 0.75))
+                    content.rotationEffect(.degrees(rustle.angle), anchor: UnitPoint(x: 0.5, y: 0.97))
                 } keyframes: { _ in
-                    KeyframeTrack(\.x) {
-                        CubicKeyframe(3.5, duration: 0.07); CubicKeyframe(-3, duration: 0.08)
-                        CubicKeyframe(2.8, duration: 0.08); CubicKeyframe(-2.4, duration: 0.08)
-                        CubicKeyframe(2, duration: 0.09); CubicKeyframe(-1.5, duration: 0.1)
-                        CubicKeyframe(1, duration: 0.12); CubicKeyframe(0, duration: 0.16)
-                    }
-                    KeyframeTrack(\.y) {
-                        CubicKeyframe(-1.5, duration: 0.09); CubicKeyframe(1.2, duration: 0.09)
-                        CubicKeyframe(-1, duration: 0.1); CubicKeyframe(0.8, duration: 0.11)
-                        CubicKeyframe(0, duration: 0.2)
-                    }
                     KeyframeTrack(\.angle) {
-                        CubicKeyframe(1.2, duration: 0.12); CubicKeyframe(-1, duration: 0.14)
-                        CubicKeyframe(0.7, duration: 0.14); CubicKeyframe(-0.4, duration: 0.16)
+                        CubicKeyframe(1.6, duration: 0.08); CubicKeyframe(-1.4, duration: 0.1)
+                        CubicKeyframe(1.1, duration: 0.1); CubicKeyframe(-0.8, duration: 0.11)
+                        CubicKeyframe(0.5, duration: 0.13); CubicKeyframe(-0.25, duration: 0.15)
                         CubicKeyframe(0, duration: 0.2)
                     }
                 }
-            placed("BackyardFront", in: layout.front)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -223,9 +201,8 @@ struct ChildTreeView: View {
 
     private func caterpillar(_ layout: TreeLayout) -> some View {
         CaterpillarView(mouthOpen: mouthOpen(layout), dizzy: dizzy, wobble: shake, chew: chew)
-            .frame(width: layout.caterpillarSize.width, height: layout.caterpillarSize.height)
-            .rotationEffect(.degrees(20), anchor: UnitPoint(x: 0.16, y: 0.6))
-            .position(layout.caterpillarCenter)
+            .frame(width: layout.caterpillar.width, height: layout.caterpillar.height)
+            .position(x: layout.caterpillar.midX, y: layout.caterpillar.midY)
             .allowsHitTesting(false)
     }
 
@@ -509,11 +486,17 @@ struct ChildTreeView: View {
     }
 }
 
-/// How far the leaf clumps are pushed during a shake.
+/// How far the tree leans during a shake.
 private struct Rustle {
-    var x: CGFloat = 0
-    var y: CGFloat = 0
     var angle: Double = 0
+}
+
+extension Color {
+    /// The garden picture's sky and grass, to carry on past its edges.
+    static let gardenSky = Color(red: 158 / 255, green: 227 / 255, blue: 235 / 255)
+    static let gardenGrass = Color(red: 195 / 255, green: 1, blue: 198 / 255)
+    /// The dark green of the leaf.
+    static let gardenLeaf = Color(red: 12 / 255, green: 76 / 255, blue: 41 / 255)
 }
 
 private extension CGFloat {

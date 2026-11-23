@@ -29,6 +29,7 @@ final class ChildGame {
         static let perfectDays = "child.perfectDays"
         static let butterflies = "child.butterflies"
         static let favourites = "child.favourites"
+        static let startingButterflies = "child.startingButterflies"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -38,9 +39,16 @@ final class ChildGame {
         favourites = Set((defaults.array(forKey: Key.favourites) as? [Int]) ?? [])
     }
 
+    /// Perfect days that already turned into butterflies. Butterflies given at the start
+    /// came with no days of their own.
+    private var daysUsed: Int {
+        max(0, butterflies - startingButterflies) * Self.daysPerButterfly
+    }
+    private var startingButterflies: Int { defaults.integer(forKey: Key.startingButterflies) }
+
     /// Steps filled on the progress bar: perfect days since the last butterfly, at most seven.
     var steps: Int {
-        min(Self.daysPerButterfly, max(0, perfectDays.count - butterflies * Self.daysPerButterfly))
+        min(Self.daysPerButterfly, max(0, perfectDays.count - daysUsed))
     }
 
     var isReadyForButterfly: Bool { steps == Self.daysPerButterfly }
@@ -65,6 +73,30 @@ final class ChildGame {
         butterflies += 1
         revealing = nil
         defaults.set(butterflies, forKey: Key.butterflies)
+    }
+
+    // MARK: Presentation start
+
+    /// For presenting: a newly joined child starts with this many butterflies...
+    static let demoButterflies = 2
+    /// ...and this many perfect days before today, so one perfect day today makes a
+    /// butterfly. Set both to 0 to start every child from scratch.
+    static let demoPerfectDays = 6
+
+    /// A child just joined with the code: start the game over with the presentation
+    /// start. Clears favourites and any ripe apples left from an earlier child.
+    static func startNewChild(defaults: UserDefaults = .standard, today: Date = Date()) {
+        let calendar = Calendar.current
+        let days = (1...max(1, demoPerfectDays)).prefix(demoPerfectDays).compactMap { back in
+            calendar.date(byAdding: .day, value: -back, to: today).map(HabitoAPI.dayString)
+        }
+        defaults.set(days.sorted(), forKey: Key.perfectDays)
+        // Earlier butterflies used up their seven days each; these six count toward the next.
+        defaults.set(demoButterflies, forKey: Key.butterflies)
+        defaults.set(demoButterflies, forKey: Key.startingButterflies)
+        defaults.removeObject(forKey: Key.favourites)
+        defaults.removeObject(forKey: "child.ripe.date")
+        defaults.removeObject(forKey: "child.ripe.ids")
     }
 
     func toggleFavourite(_ number: Int) {

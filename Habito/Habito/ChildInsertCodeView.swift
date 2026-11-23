@@ -160,6 +160,7 @@ struct ChildInsertCodeView: View {
                 throw APIError(status: 0, code: "keychain", message: "Couldn’t save the login on this phone.")
             }
             // The token is in the Keychain: let ContentView swap to the child's screens.
+            ChildGame.startNewChild()
             ParentSession.refreshRoot()
         } catch {
             if error.isCancellation { return }

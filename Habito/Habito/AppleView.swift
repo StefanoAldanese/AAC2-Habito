@@ -99,6 +99,8 @@ struct FallingApple: Identifiable {
     let velocity: CGVector
     let spin: Double
     let startDate: Date
+    /// Size against an apple on the tree: one pulled off is drawn bigger, as it is in the hand.
+    var scale: Double = 1.3
 
     static let gravity: Double = 2600
 

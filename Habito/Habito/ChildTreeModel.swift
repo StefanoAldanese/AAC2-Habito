@@ -39,6 +39,14 @@ final class ChildTreeModel {
     /// Tasks done on the server whose apple has not been eaten yet: these can be picked.
     private(set) var ripe: Set<String>
 
+    /// An apple whose task went away (the parent deleted it, or it is no longer for today).
+    struct FellOff: Equatable {
+        let id: String
+        let spot: Int
+    }
+    /// Apples that just lost their task and should fall off the tree. The view takes them.
+    private(set) var fellOff: [FellOff] = []
+
     /// Spot on the tree for each apple. A task keeps its spot until its apple is eaten.
     private var spots: [String: Int] = [:]
     /// Every task id seen since the screen opened, to tell new tasks apart.
@@ -106,6 +114,10 @@ final class ChildTreeModel {
 
     private func apply(_ fresh: TodayList) {
         let firstLoad = !loaded || date != fresh.date
+        // Apples hanging before this load whose task is gone from today's list. (On a new day
+        // the whole tree is replaced, so nothing falls.)
+        let freshIDs = Set(fresh.tasks.map(\.id))
+        let lost = firstLoad ? [] : hanging.filter { !freshIDs.contains($0.task.id) }
         if date != fresh.date {
             // A new day: every apple is today's, none of them "arrives", none is ripe.
             spots = [:]
@@ -135,6 +147,13 @@ final class ChildTreeModel {
         }
         arrivals.formIntersection(hangingIDs)
         known.formUnion(ids)
+        fellOff += lost.map { FellOff(id: $0.task.id, spot: $0.spot) }
+    }
+
+    /// The view calls this to start the falls; each apple falls once.
+    func takeFellOff() -> [FellOff] {
+        defer { fellOff = [] }
+        return fellOff
     }
 
     /// The view calls this once an apple has finished growing in.

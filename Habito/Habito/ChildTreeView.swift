@@ -120,6 +120,10 @@ struct ChildTreeView: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .coordinateSpace(name: "tree")
+            .onChange(of: model.fellOff) { _, new in
+                guard !new.isEmpty else { return }
+                for apple in model.takeFellOff() { fallOff(apple, layout: layout) }
+            }
         }
         .ignoresSafeArea()
         .overlay(alignment: .top) { topBar }
@@ -294,7 +298,7 @@ struct ChildTreeView: View {
                 ForEach(falling) { apple in
                     Image("Apple")
                         .resizable()
-                        .frame(width: layout.apple.width * 1.3, height: layout.apple.height * 1.3)
+                        .frame(width: layout.apple.width * apple.scale, height: layout.apple.height * apple.scale)
                         .rotationEffect(.degrees(apple.angle(at: context.date)))
                         .position(apple.position(at: context.date))
                 }
@@ -377,6 +381,30 @@ struct ChildTreeView: View {
             falling.removeAll { $0.id == apple.id }
             offTree.remove(task.id)
             regrow[task.id, default: 0] += 1
+        }
+    }
+
+    /// The parent deleted the task (or it is no longer for today): its apple drops off the tree,
+    /// out of the hand if the child is holding it, and does not grow back.
+    private func fallOff(_ apple: ChildTreeModel.FellOff, layout: TreeLayout) {
+        if bubble == apple.id { bubble = nil }
+        // Already falling after a drop, or going into the mouth: nothing more to show.
+        guard eating != apple.id, !offTree.contains(apple.id) else { return }
+        let inHand = carried == apple.id
+        if inHand { carried = nil }
+        let fall = FallingApple(
+            taskID: apple.id,
+            start: inHand ? hand : layout.spot(apple.spot),
+            velocity: CGVector(dx: Double.random(in: -90...90), dy: -70),
+            spin: Double.random(in: 160...320) * (Bool.random() ? 1 : -1),
+            startDate: .now,
+            scale: inHand ? 1.3 : 1
+        )
+        falling.append(fall)
+        let leave = fall.timeToLeave(layout.size)
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(leave))
+            falling.removeAll { $0.id == fall.id }
         }
     }
 

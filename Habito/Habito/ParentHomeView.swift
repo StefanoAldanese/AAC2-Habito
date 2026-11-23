@@ -124,13 +124,14 @@ struct HomeView: View {
         .sheet(item: $editor) { target in
             TaskEditorSheet(target: target) { Task { await load() } }
         }
-        .confirmationDialog(
+        // A centered dialog with Cancel and Delete side by side, like Log out below.
+        .alert(
             pendingDelete.map { "Delete “\($0.title)”?" } ?? "Delete task?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
-            titleVisibility: .visible,
             presenting: pendingDelete
         ) { task in
-            Button("Delete task", role: .destructive) { delete(task) }
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) { delete(task) }
         } message: { _ in
             Text("Days already in History stay as they are.")
         }

@@ -10,8 +10,8 @@
 //  - Grab a ripe apple to snap it off and carry it; near the caterpillar it opens
 //    its mouth. Drop it in to feed it. Locked apples stay on the tree.
 //  - Let go anywhere else, or throw it, and it falls away and regrows.
-//  - Shake the phone: dizzy caterpillar, swaying tree, swinging apples, and new
-//    tasks grow in as new apples.
+//  - Shake the phone: dizzy caterpillar, swaying tree, a leaf or two drifting down,
+//    swinging apples, and new tasks grow in as new apples.
 //
 
 import SwiftUI
@@ -84,6 +84,8 @@ struct ChildTreeView: View {
     @State private var eating: String?
     @State private var swallowing = false
     @State private var falling: [FallingApple] = []
+    /// Leaves shaken off the tree, drifting down.
+    @State private var leaves: [FallingLeaf] = []
     /// Apples that fell off: their spot stays empty until they regrow.
     @State private var offTree: Set<String> = []
     /// Set while a finger is on an apple; reset by the system if the drag is cancelled.
@@ -110,6 +112,7 @@ struct ChildTreeView: View {
                 ForEach(model.hanging, id: \.task.id) { item in
                     apple(item.task, spot: item.spot, layout: layout)
                 }
+                fallingLeaves(layout)
                 caterpillar(layout)
                 speech(layout)
                 fallingApples(layout)
@@ -292,6 +295,28 @@ struct ChildTreeView: View {
         .accessibilityHidden(true)
     }
 
+    private func fallingLeaves(_ layout: TreeLayout) -> some View {
+        TimelineView(.animation(paused: leaves.isEmpty)) { context in
+            ZStack(alignment: .topLeading) {
+                ForEach(leaves) { leaf in
+                    let state = leaf.state(at: context.date)
+                    Image("FallingLeaf")
+                        .resizable()
+                        .frame(width: leaf.size * layout.scale, height: leaf.size * 0.73 * layout.scale)
+                        .scaleEffect(x: leaf.mirrored ? -1 : 1)
+                        // A flat leaf turning in the air: it narrows as it tips over.
+                        .scaleEffect(x: 1, y: state.squash)
+                        .rotationEffect(.degrees(state.angle))
+                        .shadow(color: .black.opacity(0.18), radius: 1.5, y: 1.5)
+                        .opacity(state.opacity)
+                        .position(layout.point(state.point.x, state.point.y))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     @ViewBuilder
     private var debugShakeButton: some View {
         #if DEBUG
@@ -445,12 +470,30 @@ struct ChildTreeView: View {
         lastShakeEffect = now
         bubble = nil
         shake += 1
+        if !reduceMotion { dropLeaves() }
         dizzyToken += 1
         let token = dizzyToken
         dizzy = true
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.8))
             if dizzyToken == token { dizzy = false }
+        }
+    }
+
+    /// One or two leaves come off the tree with each shake, and drift down to the grass.
+    private func dropLeaves() {
+        let now = Date()
+        leaves.removeAll { $0.isGone(at: now) }
+        guard leaves.count < 6 else { return }
+        let count = Int.random(in: 1...2)
+        var spots = FallingLeaf.starts.shuffled()
+        for index in 0..<count {
+            let leaf = FallingLeaf(from: spots.removeFirst(), delay: 0.05 + Double(index) * Double.random(in: 0.25...0.6), now: now)
+            leaves.append(leaf)
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(leaf.lifetime + 0.2))
+                leaves.removeAll { $0.id == leaf.id }
+            }
         }
     }
 
@@ -508,6 +551,86 @@ extension Color {
     static let gardenGrass = Color(red: 195 / 255, green: 1, blue: 198 / 255)
     /// The dark green of the leaf.
     static let gardenLeaf = Color(red: 12 / 255, green: 76 / 255, blue: 41 / 255)
+}
+
+/// A leaf shaken off the tree. It is light: it speeds up only a little, then drifts down
+/// slowly, swaying from side to side and tipping as it swings, and settles on the grass
+/// before fading away. Everything is in design points (see TreeLayout).
+struct FallingLeaf: Identifiable {
+    let id = UUID()
+    let start: CGPoint
+    let delay: Double
+    let startDate: Date
+    /// Where it settles on the grass.
+    let ground: CGFloat
+    /// Falling speed once it has picked up speed, points per second.
+    let speed: CGFloat
+    let sway: CGFloat
+    let period: Double
+    let phase: Double
+    let drift: CGFloat
+    let tilt: Double
+    let size: CGFloat
+    let mirrored: Bool
+    /// Seconds from letting go until it lies on the grass.
+    let landing: Double
+
+    static let rest = 0.9
+    static let fade = 1.0
+
+    /// Places among the outer leaves of the tree where a leaf can come loose.
+    static let starts: [CGPoint] = [
+        CGPoint(x: 70, y: 300), CGPoint(x: 335, y: 290), CGPoint(x: 110, y: 185), CGPoint(x: 300, y: 165),
+        CGPoint(x: 205, y: 140), CGPoint(x: 55, y: 240), CGPoint(x: 350, y: 235), CGPoint(x: 260, y: 315),
+        CGPoint(x: 140, y: 335), CGPoint(x: 230, y: 230),
+    ]
+
+    init(from start: CGPoint, delay: Double, now: Date) {
+        self.start = CGPoint(x: start.x + .random(in: -12...12), y: start.y + .random(in: -8...8))
+        self.delay = delay
+        startDate = now
+        ground = .random(in: 470...560)
+        speed = .random(in: 48...68)
+        sway = .random(in: 18...30)
+        period = .random(in: 1.5...2.1)
+        phase = .random(in: 0...(2 * .pi))
+        drift = .random(in: -14...14)
+        tilt = .random(in: -20...20)
+        size = .random(in: 28...34)
+        mirrored = Bool.random()
+        // When does it reach the grass? Step through the fall once.
+        var t = 0.0
+        while t < 20, Self.fallen(t, speed: speed) < ground - self.start.y { t += 1.0 / 60 }
+        landing = t
+    }
+
+    /// The whole life of the leaf, from the shake until it has faded.
+    var lifetime: Double { delay + landing + Self.rest + Self.fade }
+
+    func isGone(at date: Date) -> Bool { date.timeIntervalSince(startDate) > lifetime }
+
+    /// Distance fallen after `t` seconds: it reaches its slow speed within about half a second.
+    private static func fallen(_ t: Double, speed: CGFloat) -> CGFloat {
+        let settle = 0.45
+        return speed * CGFloat(t - settle * (1 - exp(-t / settle)))
+    }
+
+    func state(at date: Date) -> (point: CGPoint, angle: Double, squash: CGFloat, opacity: Double) {
+        let elapsed = date.timeIntervalSince(startDate) - delay
+        let t = min(max(0, elapsed), landing)
+        let wave = 2 * Double.pi * t / period + phase
+        let x = start.x + drift * CGFloat(t) + sway * CGFloat(sin(wave) - sin(phase))
+        let y = start.y + Self.fallen(t, speed: speed)
+        // It tips the way it is swinging, and turns its face a little as it does.
+        let angle = tilt + 32 * cos(wave)
+        let squash = CGFloat(0.75 + 0.25 * abs(cos(wave)))
+        var opacity = 1.0
+        if elapsed < 0 { opacity = 0 }
+        else if elapsed < 0.2 { opacity = elapsed / 0.2 }
+        let resting = elapsed - landing
+        if resting > Self.rest { opacity = max(0, 1 - (resting - Self.rest) / Self.fade) }
+        return (CGPoint(x: x, y: y), angle, squash, opacity)
+    }
 }
 
 private extension CGFloat {

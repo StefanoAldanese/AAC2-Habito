@@ -29,20 +29,20 @@ struct CaterpillarView: View {
     var body: some View {
         Image(mouthOpen ? "CaterpillarOpen" : "Caterpillar")
             .resizable()
+            // The spirals always sit right on the eyes and only fade in and out there,
+            // so they never seem to fly in from somewhere else.
             .overlay {
-                if dizzy {
-                    GeometryReader { proxy in
-                        ForEach(0..<Self.eyes.count, id: \.self) { index in
-                            let eye = Self.eyes[index]
-                            DizzyEye(clockwise: index == 0, still: reduceMotion)
-                                .frame(width: eye.width * proxy.size.width, height: eye.height * proxy.size.height)
-                                .position(x: eye.midX * proxy.size.width, y: eye.midY * proxy.size.height)
-                        }
+                GeometryReader { proxy in
+                    ForEach(0..<Self.eyes.count, id: \.self) { index in
+                        let eye = Self.eyes[index]
+                        DizzyEye(clockwise: index == 0, still: reduceMotion || !dizzy)
+                            .frame(width: eye.width * proxy.size.width, height: eye.height * proxy.size.height)
+                            .position(x: eye.midX * proxy.size.width, y: eye.midY * proxy.size.height)
                     }
-                    .transition(.opacity.combined(with: .scale(scale: 0.6)))
                 }
+                .opacity(dizzy ? 1 : 0)
+                .animation(.easeOut(duration: 0.15), value: dizzy)
             }
-            .animation(.easeOut(duration: 0.2), value: dizzy)
             .keyframeAnimator(initialValue: 0.0, trigger: reduceMotion ? 0 : wobble) { content, angle in
                 content.rotationEffect(.degrees(angle), anchor: UnitPoint(x: 0.4, y: 0.95))
             } keyframes: { _ in

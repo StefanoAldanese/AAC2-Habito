@@ -111,6 +111,7 @@ struct ChildTreeView: View {
                     apple(item.task, spot: item.spot, layout: layout)
                 }
                 caterpillar(layout)
+                speech(layout)
                 fallingApples(layout)
                 inHand(layout)
             }
@@ -151,21 +152,27 @@ struct ChildTreeView: View {
     // MARK: Layers
 
     private var topBar: some View {
-        VStack(spacing: 10) {
-            ChildProgressBar(steps: game.steps, today: model.todayFraction)
-            if let message {
-                Text(message)
-                    .font(.subheadline.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .habitoGlass(in: Capsule())
-                    .transition(.move(edge: .top).combined(with: .opacity))
+        ChildProgressBar(steps: game.steps, today: model.todayFraction)
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+    }
+
+    /// Messages come from the caterpillar: a little cloud above its head.
+    private func speech(_ layout: TreeLayout) -> some View {
+        Color.clear
+            .frame(width: 1, height: 1)
+            .overlay(alignment: .bottomLeading) {
+                if let message {
+                    SpeechCloud(text: message)
+                        .frame(width: min(320, max(200, 300 * layout.scale)), alignment: .bottomLeading)
+                        .id(messageID)
+                        .transition(.scale(scale: 0.3, anchor: .bottomLeading).combined(with: .opacity))
+                }
             }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .animation(.snappy, value: message)
+            .animation(.spring(response: 0.38, dampingFraction: 0.68), value: messageID)
+            .animation(.easeOut(duration: 0.2), value: message == nil)
+            .position(layout.point(30, 578))
+            .allowsHitTesting(false)
     }
 
     private func scenery(_ layout: TreeLayout) -> some View {
@@ -414,7 +421,11 @@ struct ChildTreeView: View {
         case .done:
             ripened += 1
             bubble = nil
-            show("Well done! Now pull the apple off and feed the caterpillar.")
+            // The first time only: after that the child knows what to do.
+            if !UserDefaults.standard.bool(forKey: ChildGame.feedHintKey) {
+                UserDefaults.standard.set(true, forKey: ChildGame.feedHintKey)
+                show("Well done! Now pull the apple off and feed me!")
+            }
         case .gone(let text):
             bubble = nil
             show(text)
@@ -474,7 +485,7 @@ struct ChildTreeView: View {
         let id = messageID
         message = text
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: .seconds(text.count > 30 ? 4 : 3))
             if messageID == id { message = nil }
         }
     }
@@ -501,6 +512,51 @@ extension Color {
 
 private extension CGFloat {
     func clamped(_ low: CGFloat, _ high: CGFloat) -> CGFloat { Swift.min(high, Swift.max(low, self)) }
+}
+
+// MARK: - What the caterpillar says
+
+/// A white cloud with the caterpillar's words, and two little puffs leading down to its head.
+private struct SpeechCloud: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(text)
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.1, green: 0.17, blue: 0.12))
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(CloudShape().fill(.white).shadow(color: .black.opacity(0.12), radius: 6, y: 3))
+            Circle().fill(.white).frame(width: 14, height: 14).padding(.leading, 46)
+                .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
+            Circle().fill(.white).frame(width: 8, height: 8).padding(.leading, 60)
+                .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Caterpillar says: \(text)")
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+}
+
+/// A rounded box with soft bumps along its top and bottom: a cloud that fits any text.
+private struct CloudShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let bump = min(18, rect.height * 0.32)
+        path.addRoundedRect(in: rect, cornerSize: CGSize(width: rect.height / 2.4, height: rect.height / 2.4), style: .continuous)
+        let count = max(2, Int(rect.width / (bump * 2.6)))
+        for i in 0..<count {
+            let x = rect.minX + bump * 1.4 + (rect.width - bump * 2.8) * CGFloat(i) / CGFloat(max(1, count - 1))
+            let top = bump * (i % 2 == 0 ? 1.0 : 0.82)
+            path.addEllipse(in: CGRect(x: x - top, y: rect.minY - top * 0.45, width: top * 2, height: top * 2))
+            let low = bump * (i % 2 == 0 ? 0.8 : 0.95)
+            path.addEllipse(in: CGRect(x: x - low, y: rect.maxY - low * 1.55, width: low * 2, height: low * 2))
+        }
+        return path
+    }
 }
 
 // MARK: - The bubble from an apple
@@ -591,14 +647,10 @@ struct ChildProgressBar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image("CaterpillarFace")
+            Image("BarCaterpillar")
                 .resizable()
-                .scaledToFill()
-                .frame(width: 40, height: 40)
-                .background(Color(red: 0.85, green: 0.94, blue: 0.72))
-                .clipShape(Circle())
-                .overlay(Circle().stroke(.white, lineWidth: 2))
-                .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+                .scaledToFit()
+                .frame(width: 44, height: 36)
 
             VStack(alignment: .leading, spacing: 7) {
                 HStack(alignment: .firstTextBaseline) {
@@ -616,17 +668,11 @@ struct ChildProgressBar: View {
                 }
             }
 
-            ZStack {
-                Circle().fill(isFull ? Color.habitoGreen : Color.primary.opacity(0.10))
-                Image("TabButterfly")
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 22)
-                    .foregroundStyle(isFull ? Color.white : Color.secondary)
-            }
-            .frame(width: 40, height: 40)
-            .overlay(Circle().stroke(isFull ? Color.white : .clear, lineWidth: 2))
+            Image("BarButterfly")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 40, height: 36)
+                .scaleEffect(isFull ? 1.15 : 1)
         }
         .padding(.horizontal, 8)
         .frame(height: 56)

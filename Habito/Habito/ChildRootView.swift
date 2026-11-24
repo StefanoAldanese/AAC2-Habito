@@ -30,7 +30,8 @@ struct ChildRootView: View {
                 ButterflyDetailView(number: number) {
                     withAnimation(.snappy) { openButterfly = nil }
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                // Fade only: scaling would shrink the blur and show the page at the edges.
+                .transition(.opacity)
             }
         }
         .overlay {

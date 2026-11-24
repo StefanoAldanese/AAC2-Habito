@@ -95,9 +95,13 @@ final class ChildGame {
         defaults.set(demoButterflies, forKey: Key.butterflies)
         defaults.set(demoButterflies, forKey: Key.startingButterflies)
         defaults.removeObject(forKey: Key.favourites)
+        defaults.removeObject(forKey: feedHintKey)
         defaults.removeObject(forKey: "child.ripe.date")
         defaults.removeObject(forKey: "child.ripe.ids")
     }
+
+    /// Set once the child has been told to feed the caterpillar after "I did it!".
+    static let feedHintKey = "child.hint.feed"
 
     func toggleFavourite(_ number: Int) {
         if favourites.contains(number) { favourites.remove(number) } else { favourites.insert(number) }

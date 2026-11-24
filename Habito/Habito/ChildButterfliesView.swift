@@ -5,7 +5,7 @@
 //  "My Collection": one card for every kind of butterfly, from common to legendary.
 //  Kinds not found yet are grey with a padlock; found ones show the butterfly and its
 //  name, and open it over the page. Below, the caterpillar dreams on its leaf.
-//  "Leave this family" sits under the cards.
+//  The button at the top right leaves the family, after asking.
 //
 
 import SwiftUI
@@ -24,6 +24,11 @@ struct ChildButterfliesView: View {
                 Text("My Collection")
                     .font(.system(size: 40, weight: .bold))
                     .foregroundStyle(Color(red: 0.06, green: 0.07, blue: 0.08))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .padding(.horizontal, 44)
+                    .frame(maxWidth: .infinity)
+                    .overlay(alignment: .trailing) { leaveButton }
                     .padding(.top, 18)
                     .accessibilityAddTraits(.isHeader)
                 LazyVGrid(columns: columns, spacing: 18) {
@@ -31,12 +36,6 @@ struct ChildButterfliesView: View {
                         card(index)
                     }
                 }
-                Button("Leave this family", role: .destructive) { confirmLeave = true }
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.habitoRed)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(.white.opacity(0.7), in: Capsule())
             }
             .padding(.horizontal, 22)
             .padding(.bottom, 260) // room to scroll the cards clear of the caterpillar
@@ -51,6 +50,19 @@ struct ChildButterfliesView: View {
         } message: {
             Text("You will need the family code again to come back. Your butterflies stay on this phone.")
         }
+    }
+
+    /// Top right: leave the family, after asking.
+    private var leaveButton: some View {
+        Button { confirmLeave = true } label: {
+            Image(systemName: "rectangle.portrait.and.arrow.right")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color.habitoRed)
+                .frame(width: 40, height: 40)
+                .background(.white.opacity(0.75), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Leave this family")
     }
 
     /// The butterflies the child has of kind `index`, newest first.
@@ -260,6 +272,9 @@ struct ButterflyDetailView: View {
     let number: Int
     let onClose: () -> Void
     @Environment(ChildGame.self) private var game
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The card grows in by itself; the blurred page behind only fades.
+    @State private var shown = false
 
     var body: some View {
         let kind = ButterflyKind.of(number)
@@ -318,7 +333,9 @@ struct ButterflyDetailView: View {
             .background(Color.habitoCard, in: RoundedRectangle(cornerRadius: 34, style: .continuous))
             .shadow(color: Color(red: 0.04, green: 0.12, blue: 0.2).opacity(0.3), radius: 30, y: 24)
             .padding(.horizontal, 20)
+            .scaleEffect(shown || reduceMotion ? 1 : 0.92)
         }
+        .onAppear { withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) { shown = true } }
     }
 
     private func roundButton(_ symbol: String, label: String, tint: Color = .primary, action: @escaping () -> Void) -> some View {

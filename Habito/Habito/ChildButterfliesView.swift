@@ -21,16 +21,19 @@ struct ChildButterfliesView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 22) {
-                Text("My Collection")
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundStyle(Color(red: 0.06, green: 0.07, blue: 0.08))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .padding(.horizontal, 44)
-                    .frame(maxWidth: .infinity)
-                    .overlay(alignment: .trailing) { leaveButton }
-                    .padding(.top, 18)
-                    .accessibilityAddTraits(.isHeader)
+                // The title on the left, the leave button level with it on the right,
+                // both lined up with the edges of the cards.
+                HStack(alignment: .center, spacing: 12) {
+                    Text("My Collection")
+                        .font(.system(size: 40, weight: .bold))
+                        .foregroundStyle(Color(red: 0.06, green: 0.07, blue: 0.08))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 0)
+                    leaveButton
+                }
+                .padding(.top, 18)
                 LazyVGrid(columns: columns, spacing: 18) {
                     ForEach(ButterflyKind.all.indices, id: \.self) { index in
                         card(index)
@@ -56,10 +59,11 @@ struct ChildButterfliesView: View {
     private var leaveButton: some View {
         Button { confirmLeave = true } label: {
             Image(systemName: "rectangle.portrait.and.arrow.right")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(Color.habitoRed)
-                .frame(width: 40, height: 40)
-                .background(.white.opacity(0.75), in: Circle())
+                // A full-size tap area, with the icon's right edge on the cards' right edge.
+                .frame(width: 44, height: 44, alignment: .trailing)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Leave this family")

@@ -5,10 +5,11 @@
 //  The child's main screen, where the animations come together: the tree with
 //  one apple per task, the caterpillar on its leaf and the progress bar on top.
 //
-//  - Tap an apple to hear its task. "I did it!" marks the task done on the server
-//    (ChildTreeModel) and the apple turns ripe.
-//  - Grab a ripe apple to snap it off and carry it; near the caterpillar it opens
-//    its mouth. Drop it in to feed it. Locked apples stay on the tree.
+//  - A task not done yet is a blossom. Tap it to hear the task. "I did it!" marks the
+//    task done on the server (ChildTreeModel) and the blossom turns into an apple,
+//    dropping a few petals.
+//  - Grab an apple to snap it off and carry it; near the caterpillar it opens its
+//    mouth. Drop it in to feed it. Blossoms stay on the tree.
 //  - Let go anywhere else, or throw it, and it falls away and regrows.
 //  - Shake the phone: dizzy caterpillar, swaying tree, a leaf or two drifting down,
 //    swinging apples, and new tasks grow in as new apples.
@@ -56,6 +57,11 @@ struct TreeLayout {
     func spot(_ index: Int) -> CGPoint {
         let (x, y) = Self.spots[index]
         return point(x, y)
+    }
+
+    /// A spot in design points, for things that move in design points (falling leaves).
+    static func designSpot(_ index: Int) -> CGPoint {
+        CGPoint(x: spots[index].0, y: spots[index].1)
     }
 
     var apple: CGSize { CGSize(width: 34 * scale, height: 40.6 * scale) }
@@ -233,6 +239,7 @@ struct ChildTreeView: View {
             swingStrength: 0.75 + Double((spot * 37) % 50) / 100,
             regrow: regrow[task.id, default: 0],
             hidden: away,
+            ripe: ripe,
             growsSlowly: model.arrivals.contains(task.id),
             onGrown: { model.arrived(task.id) }
         )
@@ -256,8 +263,8 @@ struct ChildTreeView: View {
         .position(home)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Apple: \(task.title)")
-        .accessibilityValue(away ? "Off the tree" : (ripe ? "Ready to feed" : "On the tree"))
-        .accessibilityHint(ripe ? "Drag it to the caterpillar to feed it" : "Opens the task")
+        .accessibilityValue(away ? "Off the tree" : (ripe ? "Ready to feed" : "Blossom"))
+        .accessibilityHint(ripe ? "Drag it to the caterpillar to feed it" : "Opens the task. When it is done, the blossom becomes an apple")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(named: "Feed the caterpillar") {
             if ripe, eating == nil { eat(task, from: home, mouth: layout.mouth) }
@@ -283,9 +290,11 @@ struct ChildTreeView: View {
         TimelineView(.animation(paused: falling.isEmpty)) { context in
             ZStack(alignment: .topLeading) {
                 ForEach(falling) { apple in
-                    Image("Apple")
+                    let blossom = apple.image == "Blossom"
+                    Image(apple.image)
                         .resizable()
-                        .frame(width: layout.apple.width * apple.scale, height: layout.apple.height * apple.scale)
+                        .frame(width: layout.apple.width * apple.scale * (blossom ? 1.12 : 1),
+                               height: (blossom ? layout.apple.width * 1.12 : layout.apple.height) * apple.scale)
                         .rotationEffect(.degrees(apple.angle(at: context.date)))
                         .position(apple.position(at: context.date))
                 }
@@ -300,9 +309,9 @@ struct ChildTreeView: View {
             ZStack(alignment: .topLeading) {
                 ForEach(leaves) { leaf in
                     let state = leaf.state(at: context.date)
-                    Image("FallingLeaf")
+                    Image(leaf.image)
                         .resizable()
-                        .frame(width: leaf.size * layout.scale, height: leaf.size * 0.73 * layout.scale)
+                        .frame(width: leaf.size * layout.scale, height: leaf.size * leaf.aspect * layout.scale)
                         .scaleEffect(x: leaf.mirrored ? -1 : 1)
                         // A flat leaf turning in the air: it narrows as it tips over.
                         .scaleEffect(x: 1, y: state.squash)
@@ -407,7 +416,8 @@ struct ChildTreeView: View {
             velocity: CGVector(dx: Double.random(in: -90...90), dy: -70),
             spin: Double.random(in: 160...320) * (Bool.random() ? 1 : -1),
             startDate: .now,
-            scale: inHand ? 1.3 : 1
+            scale: inHand ? 1.3 : 1,
+            image: apple.ripe || inHand ? "Apple" : "Blossom"
         )
         falling.append(fall)
         let leave = fall.timeToLeave(layout.size)
@@ -446,6 +456,9 @@ struct ChildTreeView: View {
         case .done:
             ripened += 1
             bubble = nil
+            if !reduceMotion, let spot = model.hanging.first(where: { $0.task.id == task.id })?.spot {
+                dropPetals(from: TreeLayout.designSpot(spot))
+            }
             // The first time only: after that the child knows what to do.
             if !UserDefaults.standard.bool(forKey: ChildGame.feedHintKey) {
                 UserDefaults.standard.set(true, forKey: ChildGame.feedHintKey)
@@ -477,6 +490,20 @@ struct ChildTreeView: View {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.8))
             if dizzyToken == token { dizzy = false }
+        }
+    }
+
+    /// The blossom has turned into an apple: a few of its petals float down.
+    private func dropPetals(from point: CGPoint) {
+        let now = Date()
+        for index in 0..<3 {
+            let petal = FallingLeaf(from: point, delay: 0.1 + Double(index) * 0.15, now: now,
+                                    image: "Petal", aspect: 1.28, sizes: 9...12, spread: 7)
+            leaves.append(petal)
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(petal.lifetime + 0.2))
+                leaves.removeAll { $0.id == petal.id }
+            }
         }
     }
 
@@ -553,7 +580,7 @@ extension Color {
     static let gardenLeaf = Color(red: 12 / 255, green: 76 / 255, blue: 41 / 255)
 }
 
-/// A leaf shaken off the tree. It is light: it speeds up only a little, then drifts down
+/// A leaf shaken off the tree, or a petal from a blossom that became an apple. It is light: it speeds up only a little, then drifts down
 /// slowly, swaying from side to side and tipping as it swings, and settles on the grass
 /// before fading away. Everything is in design points (see TreeLayout).
 struct FallingLeaf: Identifiable {
@@ -572,6 +599,9 @@ struct FallingLeaf: Identifiable {
     let tilt: Double
     let size: CGFloat
     let mirrored: Bool
+    /// The picture, and its height for each point of width.
+    let image: String
+    let aspect: CGFloat
     /// Seconds from letting go until it lies on the grass.
     let landing: Double
 
@@ -585,8 +615,12 @@ struct FallingLeaf: Identifiable {
         CGPoint(x: 140, y: 335), CGPoint(x: 230, y: 230),
     ]
 
-    init(from start: CGPoint, delay: Double, now: Date) {
-        self.start = CGPoint(x: start.x + .random(in: -12...12), y: start.y + .random(in: -8...8))
+    /// A leaf by default; a blossom's petals use the same drift with their own picture.
+    init(from start: CGPoint, delay: Double, now: Date, image: String = "FallingLeaf", aspect: CGFloat = 0.73,
+         sizes: ClosedRange<CGFloat> = 28...34, spread: CGFloat = 12) {
+        self.start = CGPoint(x: start.x + .random(in: -spread...spread), y: start.y + .random(in: -spread * 0.7...spread * 0.7))
+        self.image = image
+        self.aspect = aspect
         self.delay = delay
         startDate = now
         ground = .random(in: 470...560)
@@ -596,7 +630,7 @@ struct FallingLeaf: Identifiable {
         phase = .random(in: 0...(2 * .pi))
         drift = .random(in: -14...14)
         tilt = .random(in: -20...20)
-        size = .random(in: 28...34)
+        size = .random(in: sizes)
         mirrored = Bool.random()
         // When does it reach the grass? Step through the fall once.
         var t = 0.0

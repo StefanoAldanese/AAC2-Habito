@@ -2,9 +2,10 @@
 //  AppleView.swift
 //  Habito
 //
-//  One apple on the tree, animation only: it swings like a pendulum when the
-//  phone is shaken, grows in slowly when its task is new, and regrows after it
-//  fell off.
+//  One apple on the tree, animation only. While its task is not done it is an
+//  apple blossom; "I did it!" turns it into an apple, ready to feed. It swings like
+//  a pendulum when the phone is shaken, grows in slowly when its task is new, and
+//  regrows after it fell off.
 //
 
 import SwiftUI
@@ -19,21 +20,26 @@ struct AppleView: View {
     var regrow: Int
     /// Hidden while the apple is in the child's hand or being eaten.
     var hidden: Bool
+    /// Done on the server: an apple. Not done yet: a blossom.
+    var ripe: Bool
     /// Called once a slowly growing apple is fully grown.
     var onGrown: () -> Void = {}
 
     @State private var scale: CGFloat
+    @State private var showsApple: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let arrivalDuration: Double = 3
     static let regrowDuration: Double = 1.5
 
-    init(size: CGSize, swing: Int, swingStrength: Double, regrow: Int, hidden: Bool, growsSlowly: Bool, onGrown: @escaping () -> Void = {}) {
+    init(size: CGSize, swing: Int, swingStrength: Double, regrow: Int, hidden: Bool, ripe: Bool, growsSlowly: Bool, onGrown: @escaping () -> Void = {}) {
         self.size = size
         self.swing = swing
         self.swingStrength = swingStrength
         self.regrow = regrow
         self.hidden = hidden
+        self.ripe = ripe
+        _showsApple = State(initialValue: ripe)
         self.onGrown = onGrown
         _scale = State(initialValue: growsSlowly ? 0 : 1)
         self.growsSlowly = growsSlowly
@@ -42,10 +48,22 @@ struct AppleView: View {
     private let growsSlowly: Bool
 
     var body: some View {
-        Image("Apple")
-            .resizable()
-            .frame(width: size.width, height: size.height)
-            .shadow(color: .black.opacity(0.25), radius: 1.5, y: 1)
+        ZStack {
+            // The blossom closes up and turns away as the apple swells in its place.
+            Image("Blossom")
+                .resizable()
+                .frame(width: size.width * 1.12, height: size.width * 1.12)
+                .scaleEffect(showsApple ? 0.2 : 1)
+                .rotationEffect(.degrees(showsApple ? 70 : 0))
+                .opacity(showsApple ? 0 : 1)
+            Image("Apple")
+                .resizable()
+                .frame(width: size.width, height: size.height)
+                .scaleEffect(showsApple ? 1 : 0.3, anchor: .top)
+                .opacity(showsApple ? 1 : 0)
+        }
+        .frame(width: size.width, height: size.height)
+        .shadow(color: .black.opacity(0.25), radius: 1.5, y: 1)
             .scaleEffect(scale, anchor: .top)
             .keyframeAnimator(initialValue: 0.0, trigger: reduceMotion ? 0 : swing) { content, angle in
                 content.rotationEffect(.degrees(angle * swingStrength), anchor: .top)
@@ -77,6 +95,11 @@ struct AppleView: View {
                     withTransaction(instant) { scale = 0 }
                 }
             }
+            .onChange(of: ripe) { _, isRipe in
+                withAnimation(reduceMotion ? .easeOut(duration: 0.25) : .spring(response: 0.6, dampingFraction: 0.55)) {
+                    showsApple = isRipe
+                }
+            }
             .onChange(of: regrow) {
                 var instant = Transaction()
                 instant.disablesAnimations = true
@@ -101,6 +124,8 @@ struct FallingApple: Identifiable {
     let startDate: Date
     /// Size against an apple on the tree: one pulled off is drawn bigger, as it is in the hand.
     var scale: Double = 1.3
+    /// "Apple", or "Blossom" for a task that was not done yet.
+    var image = "Apple"
 
     static let gravity: Double = 2600
 

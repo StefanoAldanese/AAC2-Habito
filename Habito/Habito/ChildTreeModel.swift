@@ -43,6 +43,8 @@ final class ChildTreeModel {
     struct FellOff: Equatable {
         let id: String
         let spot: Int
+        /// An apple (done) rather than a blossom.
+        let ripe: Bool
     }
     /// Apples that just lost their task and should fall off the tree. The view takes them.
     private(set) var fellOff: [FellOff] = []
@@ -118,6 +120,7 @@ final class ChildTreeModel {
         // the whole tree is replaced, so nothing falls.)
         let freshIDs = Set(fresh.tasks.map(\.id))
         let lost = firstLoad ? [] : hanging.filter { !freshIDs.contains($0.task.id) }
+            .map { FellOff(id: $0.task.id, spot: $0.spot, ripe: ripe.contains($0.task.id)) }
         if date != fresh.date {
             // A new day: every apple is today's, none of them "arrives", none is ripe.
             spots = [:]
@@ -147,7 +150,7 @@ final class ChildTreeModel {
         }
         arrivals.formIntersection(hangingIDs)
         known.formUnion(ids)
-        fellOff += lost.map { FellOff(id: $0.task.id, spot: $0.spot) }
+        fellOff += lost
     }
 
     /// The view calls this to start the falls; each apple falls once.

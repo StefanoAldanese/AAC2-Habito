@@ -516,24 +516,25 @@ private extension CGFloat {
 
 // MARK: - What the caterpillar says
 
-/// A white cloud with the caterpillar's words, and two little puffs leading down to its head.
+/// The caterpillar's words in a puffy white cloud, like the one it dreams in on the
+/// Butterflies page, with two little outlined bubbles leading down to its head.
 private struct SpeechCloud: View {
     let text: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(text)
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color(red: 0.1, green: 0.17, blue: 0.12))
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
-                .background(CloudShape().fill(.white).shadow(color: .black.opacity(0.12), radius: 6, y: 3))
-            Circle().fill(.white).frame(width: 14, height: 14).padding(.leading, 46)
-                .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
-            Circle().fill(.white).frame(width: 8, height: 8).padding(.leading, 60)
-                .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
+                .padding(.horizontal, 26)
+                .padding(.vertical, 20)
+                .background(CloudShape().fill(.white).shadow(color: .black.opacity(0.1), radius: 8, y: 4))
+            Circle().fill(.white).stroke(Color.gardenLeaf, lineWidth: 2)
+                .frame(width: 16, height: 16).padding(.leading, 48).padding(.top, 6)
+            Circle().fill(.white).stroke(Color.gardenLeaf, lineWidth: 2)
+                .frame(width: 9, height: 9).padding(.leading, 64)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Caterpillar says: \(text)")
@@ -541,20 +542,29 @@ private struct SpeechCloud: View {
     }
 }
 
-/// A rounded box with soft bumps along its top and bottom: a cloud that fits any text.
+/// Round puffs around a soft body, sized from the box's height so any text fits.
 private struct CloudShape: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        let bump = min(18, rect.height * 0.32)
-        path.addRoundedRect(in: rect, cornerSize: CGSize(width: rect.height / 2.4, height: rect.height / 2.4), style: .continuous)
-        let count = max(2, Int(rect.width / (bump * 2.6)))
-        for i in 0..<count {
-            let x = rect.minX + bump * 1.4 + (rect.width - bump * 2.8) * CGFloat(i) / CGFloat(max(1, count - 1))
-            let top = bump * (i % 2 == 0 ? 1.0 : 0.82)
-            path.addEllipse(in: CGRect(x: x - top, y: rect.minY - top * 0.45, width: top * 2, height: top * 2))
-            let low = bump * (i % 2 == 0 ? 0.8 : 0.95)
-            path.addEllipse(in: CGRect(x: x - low, y: rect.maxY - low * 1.55, width: low * 2, height: low * 2))
+        let h = rect.height, w = rect.width
+        func puff(_ x: CGFloat, _ y: CGFloat, _ d: CGFloat) {
+            path.addEllipse(in: CGRect(x: rect.minX + x - d / 2, y: rect.minY + y - d / 2, width: d, height: d))
         }
+        // the body
+        path.addRoundedRect(in: CGRect(x: rect.minX, y: rect.minY + h * 0.16, width: w, height: h * 0.7),
+                            cornerSize: CGSize(width: h * 0.35, height: h * 0.35), style: .continuous)
+        // big puffs along the top, smaller ones underneath, one at each end
+        let top = max(2, Int((w - h * 0.6) / (h * 0.8)))
+        for i in 0..<top {
+            let x = h * 0.6 + (w - h * 1.2) * CGFloat(i) / CGFloat(top - 1)
+            puff(x, h * 0.34, h * (i % 2 == 0 ? 0.86 : 1.02))
+        }
+        for i in 0..<(top - 1) {
+            let x = h * 0.6 + (w - h * 1.2) * (CGFloat(i) + 0.5) / CGFloat(top - 1)
+            puff(x, h * 0.7, h * 0.74)
+        }
+        puff(h * 0.42, h * 0.56, h * 0.84)
+        puff(w - h * 0.42, h * 0.52, h * 0.8)
         return path
     }
 }

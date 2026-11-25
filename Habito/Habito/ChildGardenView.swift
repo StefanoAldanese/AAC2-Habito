@@ -90,7 +90,7 @@ struct ChildGardenView: View {
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(red: 0.1, green: 0.17, blue: 0.12))
             GardenGuide()
-            Text("Go to My Butterflies and tap the heart on a butterfly. It will come to live in the garden.")
+            Text("Go to Butterflies and tap the heart on a butterfly. It will come to live in the garden.")
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color(red: 0.1, green: 0.17, blue: 0.12).opacity(0.85))
                 .multilineTextAlignment(.center)
@@ -196,15 +196,18 @@ private struct GardenGuide: View {
             .background(Color.primary.opacity(0.08), in: Circle())
     }
 
-    /// A hand-drawn red arrow curving down onto the heart button, nudging towards it.
+    /// A hand-drawn red arrow that arcs over and comes straight down onto the heart button,
+    /// its tip just above the button's middle, nudging down towards it.
     private var arrowToHeart: some View {
-        CuteArrow(from: UnitPoint(x: 0.1, y: 0.05), to: UnitPoint(x: 0.82, y: 0.95), bend: 0.45)
+        // Box 30 x 34; the tip is at 85% across and the very bottom. The heart button's middle is
+        // 19 points in from the card's right edge, its top 8 points down: the tip sits above it.
+        CuteArrow(from: UnitPoint(x: 0.05, y: 0.12), to: UnitPoint(x: 0.85, y: 1), bend: -0.45)
             .stroke(Color.habitoRed, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-            .frame(width: 34, height: 34)
+            .frame(width: 30, height: 34)
             .phaseAnimator(reduceMotion ? [0.0] : [0.0, 1.0]) { content, t in
-                content.offset(x: -2 * t, y: 3 * t)
+                content.offset(y: 3 * t)
             } animation: { _ in .easeInOut(duration: 0.55) }
-            .offset(x: -14, y: -24)
+            .offset(x: -(19 - 30 * 0.15), y: -(34 - 5))
     }
 
     /// A corner of the garden with the butterfly fluttering over the flowers.

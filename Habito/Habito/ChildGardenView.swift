@@ -111,20 +111,22 @@ private struct GardenGuide: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var current = 0
     private let example = ButterflyKind.all[1]
+    /// The pictures are laid out at this small size and then drawn bigger to fit the page.
+    private let size = CGSize(width: 120, height: 152)
 
     private static let ink = Color(red: 0.07, green: 0.19, blue: 0.11)
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 12) {
             TabView(selection: $current) {
                 page(step: 1, title: "Pick a favourite",
-                     text: "Open Butterflies and tap the heart on the one you love.") { side in
-                    heartPicture(side)
+                     text: "Open Butterflies and tap the heart on the one you love.", arrowRoom: true) {
+                    card.overlay(alignment: .topTrailing) { arrowToHeart }
                 }
                 .tag(0)
                 page(step: 2, title: "Watch it fly",
-                     text: "Your favourites come to live here, flying from flower to flower.") { side in
-                    gardenPicture(side)
+                     text: "Your favourites come to live here, flying from flower to flower.", arrowRoom: false) {
+                    garden
                 }
                 .tag(1)
             }
@@ -140,8 +142,8 @@ private struct GardenGuide: View {
             .habitoCapsuleButton()
         }
         // Clear of the status bar above and the tab bar below.
-        .padding(.top, 64)
-        .padding(.bottom, 112)
+        .padding(.top, 52)
+        .padding(.bottom, 102)
     }
 
     /// Our own page dots in the garden's green, with nothing behind them.
@@ -159,11 +161,14 @@ private struct GardenGuide: View {
 
     /// One page, straight on the soft garden: a small step label, a big title, one line of
     /// help, and the picture, as large as the page allows.
-    private func page<Picture: View>(step: Int, title: String, text: String,
-                                     @ViewBuilder picture: @escaping (CGFloat) -> Picture) -> some View {
+    private func page<Picture: View>(step: Int, title: String, text: String, arrowRoom: Bool,
+                                     @ViewBuilder picture: @escaping () -> Picture) -> some View {
         GeometryReader { proxy in
-            // The words take about 125 points; the picture gets the rest, square and as big as fits.
-            let side = max(140, min(proxy.size.width, proxy.size.height - 133, 400))
+            let words: CGFloat = 118
+            // The arrow above the first picture grows with it, so it counts as part of its height.
+            let arrow: CGFloat = arrowRoom ? 30 : 0
+            let room = max(80, proxy.size.height - words - 16)
+            let zoom = max(1, min(2.45, room / (size.height + arrow), (proxy.size.width - 40) / size.width))
             VStack(spacing: 0) {
                 Text("STEP \(step) OF 2")
                     .font(.system(size: 13, weight: .heavy, design: .rounded))
@@ -180,83 +185,100 @@ private struct GardenGuide: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 300)
                     .padding(.top, 6)
-                Spacer(minLength: 8)
-                picture(side)
-                    .frame(width: side, height: side)
+                Spacer(minLength: 12)
+                picture()
+                    .scaleEffect(zoom)
+                    .frame(width: size.width * zoom, height: size.height * zoom)
+                    .shadow(color: Self.ink.opacity(0.18), radius: 18, y: 10)
+                    .padding(.top, arrow * zoom) // room for the arrow above the card
                 Spacer(minLength: 0)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 20)
     }
 
-    /// Step 1: the butterfly, big, with its heart button beside it and a red arrow onto the heart.
-    /// No frame around it: it floats on the soft garden.
-    private func heartPicture(_ side: CGFloat) -> some View {
-        let heart = CGPoint(x: side * 0.83, y: side * 0.3)
-        let button = side * 0.19
-        let arrow = CGSize(width: side * 0.22, height: side * 0.17)
-        return ZStack {
-            Image(example.image)
-                .resizable()
-                .scaledToFit()
-                .frame(width: side * 0.86)
-                .shadow(color: Self.ink.opacity(0.22), radius: 14, y: 10)
-                .position(x: side * 0.44, y: side * 0.62)
-            // The heart button, as on a butterfly's card, gently beating.
-            Circle()
-                .fill(.white)
-                .shadow(color: Self.ink.opacity(0.2), radius: 8, y: 4)
-                .overlay {
+    /// The butterfly's card, small: close and heart buttons, name, rarity and picture.
+    private var card: some View {
+        VStack(spacing: 2) {
+            HStack {
+                miniButton { Image(systemName: "xmark").foregroundStyle(.primary) }
+                Spacer()
+                miniButton {
                     Image(systemName: "heart.fill")
-                        .font(.system(size: button * 0.46, weight: .semibold))
                         .foregroundStyle(Color.habitoRed)
-                        .phaseAnimator(reduceMotion ? [1.0] : [1.0, 1.2]) { content, scale in
+                        .phaseAnimator(reduceMotion ? [1.0] : [1.0, 1.25]) { content, scale in
                             content.scaleEffect(scale)
                         } animation: { _ in .easeInOut(duration: 0.55) }
                 }
-                .frame(width: button, height: button)
-                .position(heart)
-            // The arrow arcs over and comes down onto the top of the button.
-            CuteArrow(from: UnitPoint(x: 0.05, y: 0.12), to: UnitPoint(x: 0.85, y: 1), bend: -0.45)
-                .stroke(Color.habitoRed, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-                .frame(width: arrow.width, height: arrow.height)
-                .phaseAnimator(reduceMotion ? [0.0] : [0.0, 1.0]) { content, t in
-                    content.offset(y: 4 * t)
-                } animation: { _ in .easeInOut(duration: 0.55) }
-                .position(x: heart.x - arrow.width * 0.35, y: heart.y - button / 2 - 6 - arrow.height / 2)
+            }
+            Text(example.name)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.primary)
+            Text(example.rarity.rawValue)
+                .font(.system(size: 8, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(white: 0.24))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 1.5)
+                .background(example.rarity.color, in: Capsule())
+            Image(example.image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 88)
+                .shadow(color: .black.opacity(0.15), radius: 3, y: 3)
+                .padding(.top, 4)
+            Spacer(minLength: 0)
         }
-        .frame(width: side, height: side)
+        .padding(8)
+        .frame(width: size.width, height: size.height)
+        .background(Color(white: 0.97), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color(white: 0.82), lineWidth: 1.5))
     }
 
-    /// Step 2: the right-hand flower bed of the garden in a sharp round window with a white rim,
-    /// and the butterfly fluttering over it.
-    private func gardenPicture(_ side: CGFloat) -> some View {
-        // Show about 220 design points of the garden around the flower bed's middle.
-        let scale = side / 220
-        let focus = CGPoint(x: 300, y: 450)
-        return ZStack {
+    private func miniButton<Label: View>(@ViewBuilder _ label: () -> Label) -> some View {
+        label()
+            .font(.system(size: 10, weight: .semibold))
+            .frame(width: 22, height: 22)
+            .background(Color.primary.opacity(0.08), in: Circle())
+    }
+
+    /// A hand-drawn red arrow that arcs over and comes straight down onto the heart button,
+    /// its tip just above the button's middle, nudging down towards it.
+    private var arrowToHeart: some View {
+        // Box 30 x 34; the tip is at 85% across and the very bottom. The heart button's middle is
+        // 19 points in from the card's right edge, its top 8 points down: the tip sits above it.
+        CuteArrow(from: UnitPoint(x: 0.05, y: 0.12), to: UnitPoint(x: 0.85, y: 1), bend: -0.45)
+            .stroke(Color.habitoRed, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+            .frame(width: 30, height: 34)
+            .phaseAnimator(reduceMotion ? [0.0] : [0.0, 1.0]) { content, t in
+                content.offset(y: 3 * t)
+            } animation: { _ in .easeInOut(duration: 0.55) }
+            .offset(x: -(19 - 30 * 0.15), y: -(34 - 5))
+    }
+
+    /// A corner of the garden with the butterfly fluttering over the flowers.
+    private var garden: some View {
+        ZStack {
+            // The right-hand flower bed of the garden picture (design 200...402 wide).
             Image("GardenScene")
                 .resizable()
-                .frame(width: 402 * scale, height: 870 * scale)
-                .offset(x: (201 - focus.x) * scale, y: (435 - focus.y) * scale)
-                .frame(width: side * 0.92, height: side * 0.92)
-                .clipShape(Circle())
-                .overlay(Circle().strokeBorder(.white, lineWidth: 5))
-                .shadow(color: Self.ink.opacity(0.22), radius: 16, y: 10)
+                .frame(width: size.width * 402 / 202, height: size.width * 402 / 202 * 870 / 402)
+                .offset(x: -size.width * 0.5, y: -size.height * 0.1)
+                .frame(width: size.width, height: size.height)
             TimelineView(.animation(paused: reduceMotion)) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
                 Image(example.image)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: side * 0.34)
+                    .frame(width: 50)
                     .scaleEffect(x: reduceMotion ? 1 : 0.35 + 0.65 * abs(cos(2 * .pi * 2.2 * t)), y: 1)
-                    .shadow(color: .black.opacity(0.2), radius: 5, y: 9)
-                    .offset(x: reduceMotion ? 0 : side * 0.08 * sin(t * 0.9),
-                            y: reduceMotion ? -side * 0.12 : -side * 0.12 + side * 0.04 * sin(t * 1.7))
+                    .shadow(color: .black.opacity(0.18), radius: 3, y: 5)
+                    .offset(x: reduceMotion ? 0 : 10 * sin(t * 0.9), y: reduceMotion ? 0 : -18 + 6 * sin(t * 1.7))
             }
         }
-        .frame(width: side, height: side)
+        .frame(width: size.width, height: size.height)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color(white: 0.82), lineWidth: 1.5))
     }
 }
 

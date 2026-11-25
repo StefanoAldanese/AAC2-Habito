@@ -5,7 +5,7 @@
 //  "My Collection": one card for every kind of butterfly, from common to legendary.
 //  Kinds not found yet are grey with a padlock; found ones show the butterfly and its
 //  name, and open it over the page. Below, the caterpillar dreams on its leaf.
-//  The button at the top right leaves the family, after asking.
+//  The button at the top right leaves the family, once the child types the family code again.
 //
 
 import SwiftUI
@@ -47,11 +47,9 @@ struct ChildButterfliesView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(CollectionBackground())
-        .alert("Leave this family?", isPresented: $confirmLeave) {
-            Button("Cancel", role: .cancel) {}
-            Button("Leave", role: .destructive) { leave() }
-        } message: {
-            Text("You will need the family code again to come back. Your butterflies stay on this phone.")
+        // Leaving asks for the family code again, so it cannot happen by accident.
+        .sheet(isPresented: $confirmLeave) {
+            LeaveFamilyView { leave() }
         }
     }
 
@@ -95,6 +93,7 @@ struct ChildButterfliesView: View {
 
     private func leave() {
         KeychainSwift().delete(HabitoAPI.childTokenKey)
+        KeychainSwift().delete(HabitoAPI.childRoomCodeKey)
         ParentSession.refreshRoot()
     }
 }

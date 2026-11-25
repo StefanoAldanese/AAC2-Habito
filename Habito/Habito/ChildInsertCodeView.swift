@@ -6,6 +6,9 @@
 //  phone, one box per character like a one-time-code screen. A wrong code
 //  turns the boxes red, shakes them and explains underneath.
 //
+//  The boxes themselves (RoomCodeEntry) are used again when the child leaves
+//  the family: they must type the code once more.
+//
 
 import SwiftUI
 import KeychainSwift
@@ -18,12 +21,7 @@ struct ChildInsertCodeView: View {
     @FocusState private var isFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let length = 6
-
-    private var isComplete: Bool { code.count == Self.length }
-
-    /// The box waiting for the next character (the last one once the code is full).
-    private var activeIndex: Int { min(code.count, Self.length - 1) }
+    private var isComplete: Bool { code.count == RoomCodeEntry.length }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,10 +31,12 @@ struct ChildInsertCodeView: View {
             )
             .padding(.top, 56)
 
-            boxes
-                .padding(.top, 48)
+            RoomCodeEntry(code: $code, isError: errorText != nil, shakes: shakes, isFocused: $isFocused) {
+                Task { await join() }
+            }
+            .padding(.top, 48)
 
-            errorLine
+            RoomCodeError(text: errorText)
                 .padding(.top, 20)
 
             Button { Task { await join() } } label: {
@@ -57,13 +57,8 @@ struct ChildInsertCodeView: View {
         .background(HabitoBackground())
         .navigationBarTitleDisplayMode(.inline)
         .sensoryFeedback(.error, trigger: shakes)
-        .onChange(of: code) { _, new in
-            let cleaned = Self.clean(new)
-            if cleaned != new {
-                code = cleaned
-            } else if errorText != nil {
-                errorText = nil // editing the code starts over
-            }
+        .onChange(of: code) {
+            if errorText != nil { errorText = nil } // editing the code starts over
         }
         .task {
             // The keyboard comes up by itself, once the screen has finished sliding in.
@@ -72,80 +67,7 @@ struct ChildInsertCodeView: View {
         }
     }
 
-    // MARK: Pieces
-
-    /// Six boxes drawn over one tiny real text field. The field does the typing (so deleting,
-    /// pasting and the keyboard's suggestions all work); tapping the boxes brings the keyboard up.
-    private var boxes: some View {
-        ZStack {
-            TextField("", text: $code)
-                .focused($isFocused)
-                .keyboardType(.asciiCapable)
-                .textInputAutocapitalization(.characters)
-                .autocorrectionDisabled()
-                .submitLabel(.next)
-                .onSubmit { Task { await join() } }
-                .frame(width: 1, height: 1)
-                .opacity(0.01)
-                .accessibilityHidden(true)
-
-            HStack(spacing: 8) {
-                ForEach(0..<Self.length, id: \.self) { index in
-                    CodeBox(
-                        character: character(at: index),
-                        state: state(for: index),
-                        reduceMotion: reduceMotion
-                    )
-                }
-            }
-            .modifier(ShakeEffect(shakes: CGFloat(shakes)))
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { isFocused = true }
-        .accessibilityElement(children: .ignore)
-        .accessibilityIdentifier("roomCodeBoxes")
-        .accessibilityLabel("Room code")
-        .accessibilityValue(code.isEmpty ? "Empty" : "\(code.map(String.init).joined(separator: " ")), \(code.count) of \(Self.length)")
-        .accessibilityHint("Double-tap to type the six characters")
-        .accessibilityAddTraits(.isButton)
-    }
-
-    /// Takes no room until there is something to say; the button glides down when it appears.
-    private var errorLine: some View {
-        Group {
-            if let errorText {
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .padding(.top, 1)
-                    Text(errorText)
-                        .multilineTextAlignment(.center)
-                }
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(Color.habitoRed)
-                .padding(.horizontal, 36)
-                .transition(.opacity.combined(with: .offset(y: -6)))
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func character(at index: Int) -> String {
-        guard index < code.count else { return "" }
-        return String(code[code.index(code.startIndex, offsetBy: index)])
-    }
-
-    private func state(for index: Int) -> CodeBox.State {
-        if errorText != nil { return .error }
-        if isFocused && index == activeIndex { return .active }
-        return .normal
-    }
-
     // MARK: Logic
-
-    /// Letters and digits only, upper case, at most six: what a paste or a stray key may bring in.
-    private static func clean(_ text: String) -> String {
-        String(text.uppercased().filter { $0.isASCII && ($0.isLetter || $0.isNumber) }.prefix(length))
-    }
 
     private func join() async {
         guard isComplete, !isBusy else { return }
@@ -159,6 +81,8 @@ struct ChildInsertCodeView: View {
             guard KeychainSwift().set(token, forKey: HabitoAPI.childTokenKey) else {
                 throw APIError(status: 0, code: "keychain", message: "Couldn’t save the login on this phone.")
             }
+            // Kept so that leaving the family can ask for the same code again.
+            KeychainSwift().set(code, forKey: HabitoAPI.childRoomCodeKey)
             // The token is in the Keychain: let ContentView swap to the child's screens.
             ChildGame.startNewChild()
             ParentSession.refreshRoot()
@@ -183,6 +107,103 @@ struct ChildInsertCodeView: View {
             shakes += 1
         }
         AccessibilityNotification.Announcement(text).post()
+    }
+}
+
+// MARK: - The six boxes
+
+/// Six boxes drawn over one tiny real text field. The field does the typing (so deleting,
+/// pasting and the keyboard's suggestions all work); tapping the boxes brings the keyboard up.
+/// Animate `shakes` from n to n + 1 to shake the boxes.
+struct RoomCodeEntry: View {
+    static let length = 6
+
+    @Binding var code: String
+    var isError: Bool
+    var shakes: Int
+    var isFocused: FocusState<Bool>.Binding
+    var onSubmit: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The box waiting for the next character (the last one once the code is full).
+    private var activeIndex: Int { min(code.count, Self.length - 1) }
+
+    var body: some View {
+        ZStack {
+            TextField("", text: $code)
+                .focused(isFocused)
+                .keyboardType(.asciiCapable)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .submitLabel(.next)
+                .onSubmit(onSubmit)
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .accessibilityHidden(true)
+
+            HStack(spacing: 8) {
+                ForEach(0..<Self.length, id: \.self) { index in
+                    CodeBox(
+                        character: character(at: index),
+                        state: state(for: index),
+                        reduceMotion: reduceMotion
+                    )
+                }
+            }
+            .modifier(ShakeEffect(shakes: CGFloat(shakes)))
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { isFocused.wrappedValue = true }
+        .onChange(of: code) { _, new in
+            let cleaned = Self.clean(new)
+            if cleaned != new { code = cleaned }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("roomCodeBoxes")
+        .accessibilityLabel("Room code")
+        .accessibilityValue(code.isEmpty ? "Empty" : "\(code.map(String.init).joined(separator: " ")), \(code.count) of \(Self.length)")
+        .accessibilityHint("Double-tap to type the six characters")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func character(at index: Int) -> String {
+        guard index < code.count else { return "" }
+        return String(code[code.index(code.startIndex, offsetBy: index)])
+    }
+
+    private func state(for index: Int) -> CodeBox.State {
+        if isError { return .error }
+        if isFocused.wrappedValue && index == activeIndex { return .active }
+        return .normal
+    }
+
+    /// Letters and digits only, upper case, at most six: what a paste or a stray key may bring in.
+    static func clean(_ text: String) -> String {
+        String(text.uppercased().filter { $0.isASCII && ($0.isLetter || $0.isNumber) }.prefix(length))
+    }
+}
+
+/// The red line under the boxes. Takes no room until there is something to say.
+struct RoomCodeError: View {
+    let text: String?
+
+    var body: some View {
+        Group {
+            if let text {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .padding(.top, 1)
+                    Text(text)
+                        .multilineTextAlignment(.center)
+                }
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(Color.habitoRed)
+                .padding(.horizontal, 36)
+                .transition(.opacity.combined(with: .offset(y: -6)))
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 

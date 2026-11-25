@@ -120,7 +120,7 @@ private struct GardenGuide: View {
         VStack(spacing: 0) {
             TabView(selection: $current) {
                 page(step: 1, title: "Pick a favourite",
-                     text: "Open Butterflies and tap the heart on the one you love.") {
+                     text: "Open Butterflies and tap the heart on the one you like.") {
                     card.overlay(alignment: .topTrailing) { arrowToHeart }
                 }
                 .tag(0)

@@ -40,9 +40,12 @@ struct ChildGardenView: View {
                 butterflies(layout)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
+            // With no butterflies yet the garden goes soft behind the message.
+            .blur(radius: visitors.isEmpty ? 9 : 0, opaque: true)
+            .animation(.easeInOut(duration: 0.35), value: visitors.isEmpty)
         }
         .ignoresSafeArea()
-        .overlay(alignment: .top) {
+        .overlay {
             if visitors.isEmpty { hint }
         }
         .accessibilityElement(children: .ignore)
@@ -79,21 +82,25 @@ struct ChildGardenView: View {
         .allowsHitTesting(false)
     }
 
-    /// With no favourites yet: how to bring butterflies here.
+    /// With no favourites yet, in the middle of the screen: how to bring butterflies here.
     private var hint: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "heart.fill").foregroundStyle(Color.habitoRed)
-            Text("Tap the heart on a butterfly in your collection, and it will come to live in the garden.")
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "heart.fill")
+                .foregroundStyle(Color.habitoRed)
+                .padding(.top, 2)
+            Text("Go to My Butterflies and tap the heart on a butterfly. It will come to live in the garden.")
+                .font(.system(size: 17, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color(red: 0.1, green: 0.17, blue: 0.12))
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .background(.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.gardenLeaf, lineWidth: 2))
         .padding(.horizontal, 20)
-        .padding(.top, 8)
+        .padding(.vertical, 16)
+        .frame(maxWidth: 360)
+        .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.gardenLeaf, lineWidth: 2))
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
+        .padding(.horizontal, 24)
+        .transition(.opacity.combined(with: .scale(scale: 0.95)))
     }
 }
 

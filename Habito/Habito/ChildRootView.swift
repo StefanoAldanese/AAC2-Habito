@@ -20,7 +20,7 @@ struct ChildRootView: View {
             ChildTreeView()
                 .tabItem { Label("Tree", systemImage: "tree.fill") }
                 .tag(Section.tree)
-            ChildGardenView()
+            ChildGardenView { section = .butterflies }
                 .tabItem { Label("Garden", systemImage: "camera.macro") }
                 .tag(Section.garden)
             ChildButterfliesView(open: $openButterfly)

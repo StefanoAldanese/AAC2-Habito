@@ -11,6 +11,9 @@
 import SwiftUI
 
 struct ChildGardenView: View {
+    /// Switches to the Butterflies tab (the guide's button).
+    var openButterflies: () -> Void = {}
+
     @Environment(ChildGame.self) private var game
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var flock = GardenFlock()
@@ -45,12 +48,13 @@ struct ChildGardenView: View {
             .animation(.easeInOut(duration: 0.35), value: visitors.isEmpty)
         }
         .ignoresSafeArea()
-        .overlay {
-            if visitors.isEmpty { hint }
-        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
         .accessibilityIdentifier("garden")
+        // The guide stays readable and its button tappable for VoiceOver too.
+        .overlay {
+            if visitors.isEmpty { hint }
+        }
     }
 
     private var accessibilityText: String {
@@ -82,10 +86,17 @@ struct ChildGardenView: View {
         .allowsHitTesting(false)
     }
 
-    /// With no favourites yet, over the blurred garden: a two-page guide, one big card per page.
+    /// With no favourites yet: the garden goes soft and pale, and a two-page guide sits on it.
     private var hint: some View {
-        GardenGuide()
-            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        ZStack {
+            // A light veil over the blur so the words read clearly. Not a box: it covers everything.
+            LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0.25), .white.opacity(0.45)],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+            GardenGuide(openButterflies: openButterflies)
+        }
+        .transition(.opacity)
     }
 }
 
@@ -95,70 +106,94 @@ struct ChildGardenView: View {
 /// arrow to its heart, then the same butterfly flying in the garden. Big pictures and big words,
 /// so a child can read them.
 private struct GardenGuide: View {
+    let openButterflies: () -> Void
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var current = 0
     private let example = ButterflyKind.all[1]
-    /// The pictures are laid out at this small size and then drawn bigger.
+    /// The pictures are laid out at this small size and then drawn bigger to fit the page.
     private let size = CGSize(width: 120, height: 152)
-    private let zoom: CGFloat = 2.05
+
+    private static let ink = Color(red: 0.07, green: 0.19, blue: 0.11)
 
     var body: some View {
-        TabView(selection: $current) {
-            page(1, "Go to Butterflies and tap the heart on your favourite") {
-                card.overlay(alignment: .topTrailing) { arrowToHeart }
-            }
-            .tag(0)
-            page(2, "It flies into your garden!") {
-                garden
-            }
-            .tag(1)
-        }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .frame(height: 640)
-        // Our own page dots in the garden's green, with nothing behind them.
-        .overlay(alignment: .bottom) {
-            HStack(spacing: 8) {
-                ForEach(0..<2, id: \.self) { index in
-                    Capsule()
-                        .fill(Color.gardenLeaf.opacity(index == current ? 1 : 0.3))
-                        .frame(width: index == current ? 22 : 9, height: 9)
+        VStack(spacing: 18) {
+            TabView(selection: $current) {
+                page(step: 1, title: "Pick a favourite",
+                     text: "Open Butterflies and tap the heart on the one you love.", arrowRoom: true) {
+                    card.overlay(alignment: .topTrailing) { arrowToHeart }
                 }
+                .tag(0)
+                page(step: 2, title: "Watch it fly",
+                     text: "Your favourites come to live here, flying from flower to flower.", arrowRoom: false) {
+                    garden
+                }
+                .tag(1)
             }
-            .animation(.snappy, value: current)
-            .padding(.bottom, 14)
-            .accessibilityHidden(true)
+            .tabViewStyle(.page(indexDisplayMode: .never))
+
+            dots
+
+            Button(action: openButterflies) {
+                Label("Go to Butterflies", systemImage: "heart.fill")
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 10)
+            }
+            .habitoCapsuleButton()
         }
+        // Clear of the status bar above and the tab bar below.
+        .padding(.top, 64)
+        .padding(.bottom, 112)
     }
 
-    /// One page, straight on the blurred garden: the step's number, its words and its picture.
-    private func page<Picture: View>(_ number: Int, _ text: String, @ViewBuilder picture: () -> Picture) -> some View {
-        VStack(spacing: 18) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("\(number)")
-                    .font(.system(size: 18, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(Color.habitoGreen, in: Circle())
-                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 7 }
+    /// Our own page dots in the garden's green, with nothing behind them.
+    private var dots: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<2, id: \.self) { index in
+                Capsule()
+                    .fill(Color.gardenLeaf.opacity(index == current ? 1 : 0.28))
+                    .frame(width: index == current ? 24 : 8, height: 8)
+            }
+        }
+        .animation(.snappy, value: current)
+        .accessibilityHidden(true)
+    }
+
+    /// One page, straight on the soft garden: a small step label, a big title, one line of
+    /// help, and the picture, as large as the page allows.
+    private func page<Picture: View>(step: Int, title: String, text: String, arrowRoom: Bool,
+                                     @ViewBuilder picture: @escaping () -> Picture) -> some View {
+        GeometryReader { proxy in
+            let words: CGFloat = 150
+            let room = max(80, proxy.size.height - words - (arrowRoom ? 34 : 0) - 16)
+            let zoom = max(1, min(2.1, room / size.height, (proxy.size.width - 48) / size.width))
+            VStack(spacing: 0) {
+                Text("STEP \(step) OF 2")
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .tracking(1.6)
+                    .foregroundStyle(Color.habitoGreenDeep)
+                Text(title)
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundStyle(Self.ink)
+                    .padding(.top, 6)
                 Text(text)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.08, green: 0.2, blue: 0.12))
+                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .foregroundStyle(Self.ink.opacity(0.75))
+                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    // No box behind the words: a soft white glow keeps them readable on the blur.
-                    .shadow(color: .white, radius: 4)
-                    .shadow(color: .white.opacity(0.8), radius: 10)
+                    .frame(maxWidth: 300)
+                    .padding(.top, 6)
+                Spacer(minLength: 12)
+                picture()
+                    .scaleEffect(zoom)
+                    .frame(width: size.width * zoom, height: size.height * zoom)
+                    .shadow(color: Self.ink.opacity(0.18), radius: 18, y: 10)
+                    .padding(.top, arrowRoom ? 34 : 0) // room for the arrow above the card
                 Spacer(minLength: 0)
             }
-            picture()
-                .scaleEffect(zoom)
-                .frame(width: size.width * zoom, height: size.height * zoom)
-                .padding(.top, number == 1 ? 34 : 0) // room for the arrow above the card
-            Spacer(minLength: 0)
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
-        .padding(22)
-        .frame(maxWidth: 380, maxHeight: 580)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 44) // keeps the card clear of the page dots
+        .padding(.horizontal, 20)
     }
 
     /// The butterfly's card, small: close and heart buttons, name, rarity and picture.

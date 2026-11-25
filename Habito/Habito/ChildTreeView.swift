@@ -11,7 +11,8 @@
 //  - Grab an apple to snap it off and carry it; near the caterpillar it opens its
 //    mouth. Drop it in to feed it. Blossoms stay on the tree.
 //  - Let go anywhere else, or throw it, and it falls away and regrows.
-//  - Shake the phone: dizzy caterpillar, swaying tree, a leaf or two drifting down,
+//  - Shake the phone (on iPad: rub a finger back and forth on the garden): dizzy
+//    caterpillar, swaying tree, a leaf or two drifting down,
 //    swinging apples, and new tasks grow in as new apples.
 //
 
@@ -20,19 +21,45 @@ import KeychainSwift
 
 // MARK: - Layout
 
-/// Where things sit. Drawn for a 402 x 870 point phone (the garden picture), scaled to fit
-/// the screen and anchored to its bottom, so the grass always reaches the bottom edge.
-/// Above and beside the picture, plain sky and grass colours carry on.
+/// Where things sit on the child's screens, in the design's own points.
+///
+/// - iPhone: a 402 x 870 picture, scaled to fit and anchored to the bottom, so the grass
+///   always reaches the bottom edge; plain sky and grass carry on above and beside it.
+/// - iPad: a wide 1366 x 1024 picture that fills the screen in either orientation. Held
+///   upright, its sides are trimmed; on a wider iPad a little of the sky is.
+///
+/// The iPad drawings are the same tree and caterpillar, bigger, so every position on the
+/// iPad is worked out from the iPhone one, relative to the tree or the caterpillar.
 struct TreeLayout {
     let size: CGSize
+    var pad: Bool = TreeLayout.isPad
+    /// iPad, when the picture is wider than the screen (held upright): the design x kept in
+    /// the middle, so the caterpillar is not cut off at the side.
+    var focusX: CGFloat = 640
 
-    static let design = CGSize(width: 402, height: 870)
+    static var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
-    var scale: CGFloat { min(size.width / Self.design.width, size.height / Self.design.height) }
-    private var left: CGFloat { (size.width - Self.design.width * scale) / 2 }
-    private var top: CGFloat { size.height - Self.design.height * scale }
+    var design: CGSize { pad ? CGSize(width: 1366, height: 1024) : CGSize(width: 402, height: 870) }
 
-    /// A point of the 402 x 870 design, on this screen.
+    var scale: CGFloat {
+        pad ? max(size.width / design.width, size.height / design.height)
+            : min(size.width / design.width, size.height / design.height)
+    }
+    private var left: CGFloat {
+        let overflow = size.width - design.width * scale // zero or less
+        guard pad, overflow < 0 else { return overflow / 2 }
+        return min(0, max(overflow, size.width / 2 - focusX * scale))
+    }
+    /// iPhone: anchored to the bottom. iPad: what does not fit is trimmed a bit more at the top
+    /// (sky) than at the bottom (where the caterpillar lies).
+    private var top: CGFloat { pad ? (size.height - design.height * scale) * 0.6 : size.height - design.height * scale }
+
+    /// How much bigger things like apples and leaves are drawn on the iPad's bigger tree.
+    var detail: CGFloat { pad ? Self.padTree.width / Self.phoneTree.width : 1 }
+    /// Points on screen for one design point of an apple, leaf or reach distance.
+    var unit: CGFloat { scale * detail }
+
+    /// A point of the design, on this screen.
     func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
         CGPoint(x: left + x * scale, y: top + y * scale)
     }
@@ -41,13 +68,44 @@ struct TreeLayout {
         CGRect(origin: point(x, y), size: CGSize(width: width * scale, height: height * scale))
     }
 
-    /// Sky, bushes, hill, plants and the leaf: one picture.
-    var scenery: CGRect { rect(0, 0, 402, 870) }
-    var tree: CGRect { rect(39, 117.17, 320.6, 416.4) }
-    /// Where the hill meets the sky, for the colour beside a picture narrower than the screen.
+    func rect(_ r: CGRect) -> CGRect { rect(r.minX, r.minY, r.width, r.height) }
+
+    /// The whole picture.
+    var scenery: CGRect { rect(0, 0, design.width, design.height) }
+    var tree: CGRect { rect(pad ? Self.padTree : Self.phoneTree) }
+    /// iPad only: the plants, grass tufts and leaf drawn in front of the tree.
+    var front: CGRect { rect(21.5, 555, 1305, 469) }
+    /// iPhone: where the hill meets the sky, for the colour beside a narrower picture.
     var horizon: CGFloat { point(0, 431).y }
 
-    /// The ten apple spots on the tree's leaves, in design points.
+    private static let phoneTree = CGRect(x: 39, y: 117.17, width: 320.6, height: 416.4)
+    /// The iPad tree is drawn at 88% of its size in the picture, shrunk towards its roots, so its
+    /// top and blossoms sit clear below the progress bar while the trunk stays where it stood.
+    private static let padTree: CGRect = {
+        let drawn = CGRect(x: 426.5, y: 108.5, width: 511, height: 663.5), k: CGFloat = 0.88
+        return CGRect(x: drawn.midX - drawn.width * k / 2, y: drawn.maxY - drawn.height * k,
+                      width: drawn.width * k, height: drawn.height * k)
+    }()
+    private static let phoneCaterpillar = CGRect(x: 53.57, y: 590.86, width: 312.83, height: 129.95)
+    private static let padCaterpillar = CGRect(x: 376, y: 768, width: 475, height: 198)
+
+    /// An iPhone point on the tree, at the same place on this device's tree, in design points.
+    private func onTree(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+        guard pad else { return CGPoint(x: x, y: y) }
+        let from = Self.phoneTree, to = Self.padTree
+        return CGPoint(x: to.minX + (x - from.minX) / from.width * to.width,
+                       y: to.minY + (y - from.minY) / from.height * to.height)
+    }
+
+    /// An iPhone point near the caterpillar, at the same place by this device's caterpillar.
+    private func byCaterpillar(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+        guard pad else { return CGPoint(x: x, y: y) }
+        let from = Self.phoneCaterpillar, to = Self.padCaterpillar
+        return CGPoint(x: to.minX + (x - from.minX) / from.width * to.width,
+                       y: to.minY + (y - from.minY) / from.height * to.height)
+    }
+
+    /// The ten apple spots on the tree's leaves (iPhone design points).
     private static let spots: [(CGFloat, CGFloat)] = [
         (150, 160), (240, 150), (300, 200), (95, 215), (185, 205),
         (325, 265), (120, 280), (255, 255), (75, 325), (300, 320),
@@ -55,21 +113,28 @@ struct TreeLayout {
     static let spotCount = spots.count
 
     func spot(_ index: Int) -> CGPoint {
-        let (x, y) = Self.spots[index]
-        return point(x, y)
+        let p = designSpot(index)
+        return point(p.x, p.y)
     }
 
-    /// A spot in design points, for things that move in design points (falling leaves).
-    static func designSpot(_ index: Int) -> CGPoint {
-        CGPoint(x: spots[index].0, y: spots[index].1)
+    /// A spot in design points, for things that move in design points (falling petals).
+    func designSpot(_ index: Int) -> CGPoint {
+        onTree(Self.spots[index].0, Self.spots[index].1)
     }
 
-    var apple: CGSize { CGSize(width: 34 * scale, height: 40.6 * scale) }
+    /// Where a shaken leaf can come loose, in design points.
+    var leafStarts: [CGPoint] { FallingLeaf.starts.map { onTree($0.x, $0.y) } }
+    /// How far down the screen fallen leaves come to rest, in design points.
+    var ground: ClosedRange<CGFloat> { onTree(0, 470).y...onTree(0, 560).y }
+
+    var apple: CGSize { CGSize(width: 34 * unit, height: 40.6 * unit) }
 
     /// The caterpillar lies on the leaf at the bottom, its head on the left.
-    var caterpillar: CGRect { rect(53.57, 590.86, 312.83, 129.95) }
+    var caterpillar: CGRect { rect(pad ? Self.padCaterpillar : Self.phoneCaterpillar) }
     /// The middle of its open mouth.
-    var mouth: CGPoint { point(113.6, 700) }
+    var mouth: CGPoint { let p = byCaterpillar(113.6, 700); return point(p.x, p.y) }
+    /// The bottom-left corner of the speech cloud, just above its head.
+    var speech: CGPoint { let p = byCaterpillar(30, 578); return point(p.x, p.y) }
 }
 
 // MARK: - Screen
@@ -99,6 +164,8 @@ struct ChildTreeView: View {
     @State private var regrow: [String: Int] = [:]
 
     @State private var shake = 0
+    /// iPad: rubbing a finger back and forth on the garden does what a shake does on iPhone.
+    @State private var wiggle = WiggleTracker()
     @State private var lastShakeEffect = Date.distantPast
     @State private var dizzy = false
     @State private var dizzyToken = 0
@@ -115,6 +182,7 @@ struct ChildTreeView: View {
             let layout = TreeLayout(size: proxy.size)
             ZStack(alignment: .topLeading) {
                 scenery(layout)
+                if layout.pad { wiggleArea }
                 ForEach(model.hanging, id: \.task.id) { item in
                     apple(item.task, spot: item.spot, layout: layout)
                 }
@@ -173,26 +241,30 @@ struct ChildTreeView: View {
             .overlay(alignment: .bottomLeading) {
                 if let message {
                     SpeechCloud(text: message)
-                        .frame(width: min(320, max(200, 300 * layout.scale)), alignment: .bottomLeading)
+                        .frame(width: min(layout.pad ? 420 : 320, max(200, 300 * layout.unit)), alignment: .bottomLeading)
                         .id(messageID)
                         .transition(.scale(scale: 0.3, anchor: .bottomLeading).combined(with: .opacity))
                 }
             }
             .animation(.spring(response: 0.38, dampingFraction: 0.68), value: messageID)
             .animation(.easeOut(duration: 0.2), value: message == nil)
-            .position(layout.point(30, 578))
+            .position(layout.speech)
             .allowsHitTesting(false)
     }
 
     private func scenery(_ layout: TreeLayout) -> some View {
         ZStack(alignment: .topLeading) {
-            VStack(spacing: 0) {
-                Color.gardenSky.frame(height: max(0, layout.horizon))
-                Color.gardenGrass
+            if layout.pad {
+                placed("PadTreeScenery", in: layout.scenery)
+            } else {
+                VStack(spacing: 0) {
+                    Color.gardenSky.frame(height: max(0, layout.horizon))
+                    Color.gardenGrass
+                }
+                placed("Scenery", in: layout.scenery)
             }
-            placed("Scenery", in: layout.scenery)
             // The whole tree sways from its roots when the phone is shaken.
-            placed("Tree", in: layout.tree)
+            placed(layout.pad ? "PadTree" : "Tree", in: layout.tree)
                 .keyframeAnimator(initialValue: Rustle(), trigger: reduceMotion ? 0 : shake) { content, rustle in
                     content.rotationEffect(.degrees(rustle.angle), anchor: UnitPoint(x: 0.5, y: 0.97))
                 } keyframes: { _ in
@@ -203,9 +275,39 @@ struct ChildTreeView: View {
                         CubicKeyframe(0, duration: 0.2)
                     }
                 }
+            if layout.pad {
+                placed("PadTreeFront", in: layout.front)
+            }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    /// iPad only: the whole garden behind the apples listens for a finger rubbed back and forth.
+    /// Apples, the caterpillar and the bar keep their own taps and drags on top of it.
+    private var wiggleArea: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        guard wiggle.add(value.location, at: .now) else { return }
+                        // Like a shake: dizzy caterpillar, swaying tree, then a look for new tasks.
+                        shaken()
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(450))
+                            await refreshAfterShake()
+                        }
+                    }
+                    .onEnded { _ in wiggle.reset() }
+            )
+            .accessibilityElement()
+            .accessibilityLabel("Garden")
+            .accessibilityHint("Rub your finger back and forth to look for new tasks")
+            .accessibilityAction(named: "Look for new tasks") {
+                shaken()
+                Task { await refreshAfterShake() }
+            }
     }
 
     private func placed(_ name: String, in rect: CGRect) -> some View {
@@ -226,7 +328,7 @@ struct ChildTreeView: View {
     private func mouthOpen(_ layout: TreeLayout) -> Bool {
         if eating != nil { return true }
         guard carried != nil else { return false }
-        return distance(hand, layout.mouth) < Reach.open * layout.scale
+        return distance(hand, layout.mouth) < Reach.open * layout.unit
     }
 
     private func apple(_ task: TaskItem, spot: Int, layout: TreeLayout) -> some View {
@@ -311,7 +413,7 @@ struct ChildTreeView: View {
                     let state = leaf.state(at: context.date)
                     Image(leaf.image)
                         .resizable()
-                        .frame(width: leaf.size * layout.scale, height: leaf.size * leaf.aspect * layout.scale)
+                        .frame(width: leaf.size * layout.unit, height: leaf.size * leaf.aspect * layout.unit)
                         .scaleEffect(x: leaf.mirrored ? -1 : 1)
                         // A flat leaf turning in the air: it narrows as it tips over.
                         .scaleEffect(x: 1, y: state.squash)
@@ -372,7 +474,7 @@ struct ChildTreeView: View {
                 }
             }
             .onEnded { value in
-                if distance(value.location, layout.mouth) < Reach.eat * layout.scale {
+                if distance(value.location, layout.mouth) < Reach.eat * layout.unit {
                     eat(task, from: value.location, mouth: layout.mouth)
                 } else {
                     let speed = hypot(value.velocity.width, value.velocity.height)
@@ -457,7 +559,7 @@ struct ChildTreeView: View {
             ripened += 1
             bubble = nil
             if !reduceMotion, let spot = model.hanging.first(where: { $0.task.id == task.id })?.spot {
-                dropPetals(from: TreeLayout.designSpot(spot))
+                dropPetals(from: TreeLayout(size: .zero).designSpot(spot))
             }
             // The first time only: after that the child knows what to do.
             if !UserDefaults.standard.bool(forKey: ChildGame.feedHintKey) {
@@ -497,7 +599,9 @@ struct ChildTreeView: View {
     private func dropPetals(from point: CGPoint) {
         let now = Date()
         for index in 0..<3 {
+            let design = TreeLayout(size: .zero)
             let petal = FallingLeaf(from: point, delay: 0.1 + Double(index) * 0.15, now: now,
+                                    ground: design.ground, detail: design.detail,
                                     image: "Petal", aspect: 1.28, sizes: 9...12, spread: 7)
             leaves.append(petal)
             Task { @MainActor in
@@ -513,9 +617,12 @@ struct ChildTreeView: View {
         leaves.removeAll { $0.isGone(at: now) }
         guard leaves.count < 6 else { return }
         let count = Int.random(in: 1...2)
-        var spots = FallingLeaf.starts.shuffled()
+        // Only the design-point answers are needed here, which do not depend on the screen size.
+        let design = TreeLayout(size: .zero)
+        var spots = design.leafStarts.shuffled()
         for index in 0..<count {
-            let leaf = FallingLeaf(from: spots.removeFirst(), delay: 0.05 + Double(index) * Double.random(in: 0.25...0.6), now: now)
+            let leaf = FallingLeaf(from: spots.removeFirst(), delay: 0.05 + Double(index) * Double.random(in: 0.25...0.6), now: now,
+                                   ground: design.ground, detail: design.detail)
             leaves.append(leaf)
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(leaf.lifetime + 0.2))
@@ -568,6 +675,39 @@ struct ChildTreeView: View {
     }
 }
 
+/// Spots a finger rubbed quickly back and forth: four or more changes of direction, each after
+/// a real movement, within a second and a half. One rub counts once until the finger lifts.
+struct WiggleTracker {
+    private var anchor: CGPoint?
+    private var direction: CGVector = .zero
+    private var turns: [Date] = []
+    private var fired = false
+
+    static let step: CGFloat = 14
+    static let turnsNeeded = 4
+    static let window: TimeInterval = 1.5
+
+    /// Feeds the finger's position; true when this movement completes a wiggle.
+    mutating func add(_ point: CGPoint, at date: Date) -> Bool {
+        guard let start = anchor else { anchor = point; return false }
+        let dx = point.x - start.x, dy = point.y - start.y
+        guard hypot(dx, dy) >= Self.step else { return false }
+        let now = CGVector(dx: dx, dy: dy)
+        // A turn: this stretch goes against the last one (they point more than 90° apart).
+        if direction != .zero, now.dx * direction.dx + now.dy * direction.dy < 0 {
+            turns.append(date)
+        }
+        direction = now
+        anchor = point
+        turns.removeAll { date.timeIntervalSince($0) > Self.window }
+        guard !fired, turns.count >= Self.turnsNeeded else { return false }
+        fired = true
+        return true
+    }
+
+    mutating func reset() { self = WiggleTracker() }
+}
+
 /// How far the tree leans during a shake.
 private struct Rustle {
     var angle: Double = 0
@@ -617,25 +757,29 @@ struct FallingLeaf: Identifiable {
     ]
 
     /// A leaf by default; a blossom's petals use the same drift with their own picture.
-    init(from start: CGPoint, delay: Double, now: Date, image: String = "FallingLeaf", aspect: CGFloat = 0.73,
+    /// `ground` is where it may come to rest and `detail` how much bigger the tree is drawn
+    /// (iPad), both in design points; `sizes` is in the iPhone's points.
+    init(from start: CGPoint, delay: Double, now: Date, ground: ClosedRange<CGFloat> = 470...560, detail: CGFloat = 1,
+         image: String = "FallingLeaf", aspect: CGFloat = 0.73,
          sizes: ClosedRange<CGFloat> = 28...34, spread: CGFloat = 12) {
+        let spread = spread * detail
         self.start = CGPoint(x: start.x + .random(in: -spread...spread), y: start.y + .random(in: -spread * 0.7...spread * 0.7))
         self.image = image
         self.aspect = aspect
         self.delay = delay
         startDate = now
-        ground = .random(in: 470...560)
-        speed = .random(in: 48...68)
-        sway = .random(in: 18...30)
+        self.ground = .random(in: ground)
+        speed = .random(in: 48...68) * detail
+        sway = .random(in: 18...30) * detail
         period = .random(in: 1.5...2.1)
         phase = .random(in: 0...(2 * .pi))
-        drift = .random(in: -14...14)
+        drift = .random(in: -14...14) * detail
         tilt = .random(in: -20...20)
         size = .random(in: sizes)
         mirrored = Bool.random()
         // When does it reach the grass? Step through the fall once.
         var t = 0.0
-        while t < 20, Self.fallen(t, speed: speed) < ground - self.start.y { t += 1.0 / 60 }
+        while t < 20, Self.fallen(t, speed: speed) < self.ground - self.start.y { t += 1.0 / 60 }
         landing = t
     }
 

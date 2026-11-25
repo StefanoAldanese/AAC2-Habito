@@ -16,7 +16,8 @@ struct ChildButterfliesView: View {
     @Binding var open: Int?
     @State private var confirmLeave = false
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 14), count: 3)
+    /// Three cards a row on iPhone; on iPad all six fit in one row.
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 14), count: TreeLayout.isPad ? 6 : 3)
 
     var body: some View {
         ScrollView {
@@ -42,7 +43,7 @@ struct ChildButterfliesView: View {
             }
             .padding(.horizontal, 22)
             .padding(.bottom, 260) // room to scroll the cards clear of the caterpillar
-            .frame(maxWidth: 520)
+            .frame(maxWidth: TreeLayout.isPad ? 980 : 520)
             .frame(maxWidth: .infinity)
         }
         .scrollBounceBehavior(.basedOnSize)
@@ -177,9 +178,41 @@ extension ButterflyKind.Rarity {
 
 /// Sky, a green hill, and the caterpillar on its bitten leaf, dreaming of a butterfly.
 private struct CollectionBackground: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
+            if TreeLayout.isPad {
+                padScene(TreeLayout(size: size, focusX: 540)) // keeps the caterpillar's head in view
+            } else {
+                phoneScene(size)
+            }
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+
+    /// iPad: the wide drawing (sky, hill, bitten leaf and caterpillar), filling the screen like
+    /// the tree, with the thought cloud floating over the caterpillar's head.
+    private func padScene(_ layout: TreeLayout) -> some View {
+        let cloud = layout.rect(431, 695.5, 113.5, 113.5)
+        return ZStack(alignment: .topLeading) {
+            Image("PadCollectionScene")
+                .resizable()
+                .frame(width: layout.scenery.width, height: layout.scenery.height)
+                .position(x: layout.scenery.midX, y: layout.scenery.midY)
+            Image("PadThought")
+                .resizable()
+                .frame(width: cloud.width, height: cloud.height)
+                .phaseAnimator(reduceMotion ? [0.0] : [0.0, 1.0]) { content, phase in
+                    content.offset(y: -6 * layout.scale * phase)
+                } animation: { _ in .easeInOut(duration: 1.6) }
+                .position(x: cloud.midX, y: cloud.midY)
+        }
+    }
+
+    private func phoneScene(_ size: CGSize) -> some View {
             ZStack(alignment: .topLeading) {
                 Color.gardenSky
                 Hill()
@@ -191,9 +224,6 @@ private struct CollectionBackground: View {
                     .position(x: min(size.width * 0.78, 420) / 2 - size.width * 0.04,
                               y: size.height - min(size.width * 0.78, 420) * 0.47)
             }
-        }
-        .ignoresSafeArea()
-        .accessibilityHidden(true)
     }
 }
 

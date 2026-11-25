@@ -209,9 +209,12 @@ struct BottomButton: View {
             }
         }
         .buttonStyle(HabitoPrimaryButtonStyle())
+        // On iPad it stays as wide as the form above it instead of spanning the screen.
+        .frame(maxWidth: 420)
         .padding(.horizontal, 41)
         .padding(.top, 8)
         .padding(.bottom, 8)
+        .frame(maxWidth: .infinity)
     }
 }
 

@@ -27,15 +27,17 @@ struct ChildGardenView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            // The same 402 x 870 design frame as the tree, fitted and anchored to the bottom.
+            // The same design frame as the tree (iPhone or iPad, see TreeLayout).
             let layout = TreeLayout(size: proxy.size)
             ZStack(alignment: .topLeading) {
-                // Sky and grass carry on past the picture's edges on other screen shapes.
-                VStack(spacing: 0) {
-                    Color.gardenSky.frame(height: max(0, layout.point(0, 293).y))
-                    Color.gardenGrass
+                // Sky and grass carry on past the picture's edges on other phone shapes.
+                if !layout.pad {
+                    VStack(spacing: 0) {
+                        Color.gardenSky.frame(height: max(0, layout.point(0, 293).y))
+                        Color.gardenGrass
+                    }
                 }
-                Image("GardenScene")
+                Image(layout.pad ? "PadGardenScene" : "GardenScene")
                     .resizable()
                     .frame(width: layout.scenery.width, height: layout.scenery.height)
                     .position(x: layout.scenery.midX, y: layout.scenery.midY)
@@ -341,8 +343,8 @@ final class GardenFlock {
         let x: CGFloat, y: CGFloat, width: CGFloat
     }
 
-    /// The flower heads in the garden picture (sunflowers, roses, the little pink flower, daisies).
-    static let flowers: [Flower] = [
+    /// The flower heads in the iPhone garden picture (sunflowers, roses, the little pink flower, daisies).
+    static let phoneFlowers: [Flower] = [
         Flower(x: 386, y: 363, width: 32), Flower(x: 328, y: 387, width: 34), Flower(x: 370, y: 408, width: 49),
         Flower(x: 81, y: 495, width: 43), Flower(x: 130, y: 514, width: 51),
         Flower(x: 381, y: 498, width: 39), Flower(x: 330, y: 506, width: 30), Flower(x: 289, y: 514, width: 38),
@@ -352,15 +354,41 @@ final class GardenFlock {
         Flower(x: 68, y: 581, width: 24), Flower(x: 88, y: 616, width: 24), Flower(x: 51, y: 622, width: 24),
     ]
 
+    /// The same for the iPad's wider garden, with its two flower beds.
+    static let padFlowers: [Flower] = [
+        Flower(x: 886, y: 631, width: 55), Flower(x: 812, y: 652, width: 62), Flower(x: 930, y: 678, width: 60),
+        Flower(x: 161, y: 690, width: 52), Flower(x: 294, y: 732, width: 55), Flower(x: 216, y: 742, width: 66),
+        Flower(x: 328, y: 787, width: 62), Flower(x: 186, y: 790, width: 42),
+        Flower(x: 828, y: 563, width: 36), Flower(x: 784, y: 590, width: 36), Flower(x: 738, y: 628, width: 36),
+        Flower(x: 1210, y: 594, width: 40), Flower(x: 1268, y: 630, width: 69),
+        Flower(x: 440, y: 636, width: 50), Flower(x: 498, y: 658, width: 59),
+        Flower(x: 462, y: 793, width: 34), Flower(x: 414, y: 802, width: 34),
+        Flower(x: 931, y: 585, width: 30), Flower(x: 967, y: 606, width: 30), Flower(x: 1004, y: 638, width: 30),
+        Flower(x: 1162, y: 556, width: 28), Flower(x: 412, y: 687, width: 26), Flower(x: 391, y: 718, width: 26),
+        Flower(x: 436, y: 746, width: 28), Flower(x: 372, y: 758, width: 28),
+    ]
+
+    let flowers: [Flower]
+    /// Width of a flying butterfly's drawing, in design points.
+    let flyingWidth: CGFloat
+    /// Where they fly: over the hill and the beds, under the sky's top.
+    let air: CGRect
+    /// How much bigger the iPad garden is drawn: flights are longer and bob more.
+    private let detail: CGFloat
+
+    init(pad: Bool = TreeLayout.isPad) {
+        flowers = pad ? Self.padFlowers : Self.phoneFlowers
+        flyingWidth = pad ? 70 : 46
+        air = pad ? CGRect(x: 80, y: 300, width: 1210, height: 520) : CGRect(x: 30, y: 150, width: 342, height: 480)
+        detail = pad ? 1.5 : 1
+    }
+
     /// The butterfly pictures are 900 x 773 with the drawing 816 points wide in the middle.
     static let drawingShare: CGFloat = 816.0 / 900
     static let pictureAspect: CGFloat = 773.0 / 900
     /// The drawing's height for each point of its width.
     static let drawingAspect: CGFloat = 598.0 / 816
 
-    static let flyingWidth: CGFloat = 46
-    /// Where they fly: over the hill and the beds, under the sky's top.
-    static let air = CGRect(x: 30, y: 150, width: 342, height: 480)
 
     private struct Leg {
         let start: Date, end: Date
@@ -380,7 +408,7 @@ final class GardenFlock {
         while let last = legs[number]?.last, last.end < date.addingTimeInterval(4) { plan(number, after: last) }
         legs[number]?.removeAll { $0.end < date.addingTimeInterval(-2) }
         guard let leg = legs[number]?.first(where: { $0.end >= date }) else {
-            return Pose(point: CGPoint(x: Self.air.midX, y: Self.air.midY), width: Self.flyingWidth, wings: 1, tilt: 0, resting: false)
+            return Pose(point: CGPoint(x: air.midX, y: air.midY), width: flyingWidth, wings: 1, tilt: 0, resting: false)
         }
         let span = leg.end.timeIntervalSince(leg.start)
         let u = span > 0 ? min(1, max(0, date.timeIntervalSince(leg.start) / span)) : 1
@@ -394,7 +422,7 @@ final class GardenFlock {
         // Smooth start and stop along a curve, with a little bobbing up and down in the middle.
         let e = CGFloat(u * u * (3 - 2 * u))
         var point = Self.bezier(leg.from, leg.control, leg.to, e)
-        point.y += CGFloat(6 * sin(2 * .pi * 1.3 * t + leg.phase) * sin(.pi * u))
+        point.y += CGFloat(6 * sin(2 * .pi * 1.3 * t + leg.phase) * sin(.pi * u)) * detail
         // Shrinking to the flower's size happens near the end of a landing (and growing at take-off).
         let grow = leg.toWidth < leg.fromWidth ? pow(e, 2) : 1 - pow(1 - e, 2)
         let width = leg.fromWidth + (leg.toWidth - leg.fromWidth) * grow
@@ -407,36 +435,36 @@ final class GardenFlock {
 
     /// Reduce Motion: every butterfly simply sits on its own flower.
     func still(_ number: Int, among visitors: [Int]) -> Pose {
-        let index = (visitors.firstIndex(of: number) ?? 0) * 5 % Self.flowers.count
-        let flower = Self.flowers[index]
+        let index = (visitors.firstIndex(of: number) ?? 0) * 5 % flowers.count
+        let flower = flowers[index]
         return Pose(point: Self.seat(on: flower), width: flower.width, wings: 1, tilt: 0, resting: true)
     }
 
     // MARK: Planning
 
     private func begin(_ number: Int, at date: Date) {
-        let start = Self.randomAir()
+        let start = randomAir()
         let hold = Leg(start: date, end: date.addingTimeInterval(.random(in: 0...0.6)), from: start, control: start, to: start,
-                       fromWidth: Self.flyingWidth, toWidth: Self.flyingWidth, resting: false, tilt: 0, phase: .random(in: 0...6))
+                       fromWidth: flyingWidth, toWidth: flyingWidth, resting: false, tilt: 0, phase: .random(in: 0...6))
         legs[number] = [hold]
     }
 
     private func plan(_ number: Int, after last: Leg) {
         var next: [Leg] = []
-        if last.resting || Bool.random() || last.toWidth < Self.flyingWidth {
+        if last.resting || Bool.random() || last.toWidth < flyingWidth {
             // Take off or keep wandering: one loop through the air.
-            next.append(fly(from: last.to, width: last.toWidth, to: Self.randomAir(), toWidth: Self.flyingWidth, at: last.end))
+            next.append(fly(from: last.to, width: last.toWidth, to: randomAir(), toWidth: flyingWidth, at: last.end))
         } else if let landing = land(from: last.to, at: last.end) {
             next.append(contentsOf: landing)
         } else {
-            next.append(fly(from: last.to, width: last.toWidth, to: Self.randomAir(), toWidth: Self.flyingWidth, at: last.end))
+            next.append(fly(from: last.to, width: last.toWidth, to: randomAir(), toWidth: flyingWidth, at: last.end))
         }
         legs[number, default: []].append(contentsOf: next)
     }
 
     private func fly(from: CGPoint, width: CGFloat, to: CGPoint, toWidth: CGFloat, at start: Date) -> Leg {
         let distance = hypot(to.x - from.x, to.y - from.y)
-        let duration = max(1.4, Double(distance) / 62)
+        let duration = max(1.4, Double(distance) / (62 * Double(detail)))
         // Bend the path to one side so it is a curve, not a straight line.
         let mid = CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)
         let bend = distance * CGFloat.random(in: 0.2...0.45) * (Bool.random() ? 1 : -1)
@@ -449,10 +477,10 @@ final class GardenFlock {
     /// Glide onto a flower that is free for the whole visit, then rest there.
     private func land(from point: CGPoint, at start: Date) -> [Leg]? {
         let rest = Double.random(in: 3.5...7)
-        for index in Self.flowers.indices.shuffled() {
-            let flower = Self.flowers[index]
+        for index in flowers.indices.shuffled() {
+            let flower = flowers[index]
             let seat = Self.seat(on: flower)
-            let glide = fly(from: point, width: Self.flyingWidth, to: seat, toWidth: flower.width, at: start)
+            let glide = fly(from: point, width: flyingWidth, to: seat, toWidth: flower.width, at: start)
             let leave = glide.end.addingTimeInterval(rest)
             let taken = bookings[index, default: []].contains { $0.start < leave.addingTimeInterval(1) && glide.end.addingTimeInterval(-1) < $0.end }
             if taken { continue }
@@ -470,7 +498,7 @@ final class GardenFlock {
         CGPoint(x: flower.x, y: flower.y - flower.width * drawingAspect * 0.22)
     }
 
-    private static func randomAir() -> CGPoint {
+    private func randomAir() -> CGPoint {
         CGPoint(x: .random(in: air.minX...air.maxX), y: .random(in: air.minY...air.maxY))
     }
 

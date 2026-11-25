@@ -287,6 +287,8 @@ enum HabitoAPI {
     // MARK: Child
 
     static let childTokenKey = "child_token"
+    /// The family code this phone joined with, kept so that leaving can ask for it again.
+    static let childRoomCodeKey = "child_room_code"
 
     /// A call with the child's device token. Throws `APIError.signedOut` when the token is
     /// missing or no longer valid (the parent's code was used on another device).
@@ -302,6 +304,16 @@ enum HabitoAPI {
         if http.statusCode == 401 { throw APIError.signedOut }
         guard (200..<300).contains(http.statusCode) else { throw failure(data, http) }
         return data
+    }
+
+    /// The family code, from the server (for phones that joined before the app kept it).
+    /// Nil from a server that does not send it.
+    static func childRoomCode() async throws -> String? {
+        struct Me: Decodable {
+            struct Child: Decodable { let roomCode: String? }
+            let child: Child?
+        }
+        return try decode(Me.self, from: try await childCall("GET", "/me")).child?.roomCode
     }
 
     /// Today's tasks, as the child's device sees them.

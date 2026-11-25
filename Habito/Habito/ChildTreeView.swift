@@ -563,6 +563,7 @@ struct ChildTreeView: View {
     /// The parent's code was used on another device: back to the start.
     private func signOut() {
         KeychainSwift().delete(HabitoAPI.childTokenKey)
+        KeychainSwift().delete(HabitoAPI.childRoomCodeKey)
         ParentSession.refreshRoot()
     }
 }

@@ -221,9 +221,10 @@ private struct DreamingCaterpillar: View {
         GeometryReader { proxy in
             let s = proxy.size.width / 402
             ZStack(alignment: .topLeading) {
+                // The garden's leaf, with its tip drawn on (in the garden it is off the screen).
                 Image("LeafBitten")
                     .resizable()
-                    .frame(width: 402 * s, height: 313.64 * s)
+                    .frame(width: 418 * s, height: 313.64 * s)
                 Image("Caterpillar")
                     .resizable()
                     .frame(width: 312.83 * s, height: 129.95 * s)
@@ -246,14 +247,10 @@ private struct ThoughtBubble: View {
         GeometryReader { proxy in
             let w = proxy.size.width, h = proxy.size.height
             ZStack(alignment: .topLeading) {
-                Group {
-                    Circle().frame(width: w * 0.42).offset(x: w * 0.1, y: h * 0.08)
-                    Circle().frame(width: w * 0.5).offset(x: w * 0.38, y: 0)
-                    Circle().frame(width: w * 0.38).offset(x: w * 0.6, y: h * 0.2)
-                    Circle().frame(width: w * 0.44).offset(x: w * 0.02, y: h * 0.26)
-                    Capsule().frame(width: w * 0.8, height: h * 0.36).offset(x: w * 0.12, y: h * 0.3)
-                }
-                .foregroundStyle(.white)
+                // An outline round the outside only: the outline is drawn first, twice as
+                // thick, and the white cloud covers its inner half and the overlaps.
+                CloudPuffs().stroke(Color.gardenLeaf, lineWidth: 4)
+                CloudPuffs().fill(.white)
                 Image("TabButterfly")
                     .renderingMode(.template)
                     .resizable()
@@ -267,6 +264,22 @@ private struct ThoughtBubble: View {
                     .frame(width: w * 0.08).offset(x: w * 0.02, y: h * 0.88)
             }
         }
+    }
+}
+
+/// The thought cloud: four round puffs over a soft body.
+private struct CloudPuffs: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width, h = rect.height
+        var path = Path()
+        // (left, top, diameter), as fractions of the cloud
+        for (x, y, d) in [(0.1, 0.08, 0.42), (0.38, 0.0, 0.5), (0.6, 0.2, 0.38), (0.02, 0.26, 0.44)] {
+            let size = w * d
+            path.addEllipse(in: CGRect(x: rect.minX + w * x, y: rect.minY + h * y, width: size, height: size))
+        }
+        path.addRoundedRect(in: CGRect(x: rect.minX + w * 0.12, y: rect.minY + h * 0.3, width: w * 0.8, height: h * 0.36),
+                            cornerSize: CGSize(width: h * 0.18, height: h * 0.18))
+        return path
     }
 }
 

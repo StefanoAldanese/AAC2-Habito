@@ -82,25 +82,183 @@ struct ChildGardenView: View {
         .allowsHitTesting(false)
     }
 
-    /// With no favourites yet, in the middle of the screen: how to bring butterflies here.
+    /// With no favourites yet, in the middle of the screen: how to bring butterflies here,
+    /// with two little pictures of the app: tap the heart, and the butterfly flies here.
     private var hint: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "heart.fill")
-                .foregroundStyle(Color.habitoRed)
-                .padding(.top, 2)
-            Text("Go to My Butterflies and tap the heart on a butterfly. It will come to live in the garden.")
-                .font(.system(size: 17, weight: .semibold, design: .rounded))
+        VStack(spacing: 14) {
+            Text("Invite a butterfly!")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(red: 0.1, green: 0.17, blue: 0.12))
+            GardenGuide()
+            Text("Go to My Butterflies and tap the heart on a butterfly. It will come to live in the garden.")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.1, green: 0.17, blue: 0.12).opacity(0.85))
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 18)
+        .padding(.top, 18)
+        .padding(.bottom, 20)
         .frame(maxWidth: 360)
-        .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.gardenLeaf, lineWidth: 2))
+        .background(.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.gardenLeaf, lineWidth: 2))
         .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 20)
         .transition(.opacity.combined(with: .scale(scale: 0.95)))
+    }
+}
+
+// MARK: - The picture guide
+
+/// Two small pictures of the app side by side: a butterfly's card with an arrow to its heart,
+/// then the same butterfly flying in the garden.
+private struct GardenGuide: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let example = ButterflyKind.all[1]
+    private let size = CGSize(width: 124, height: 158)
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 6) {
+            VStack(spacing: 6) {
+                card
+                    .overlay(alignment: .topTrailing) { arrowToHeart }
+                step("1", "Tap the heart")
+            }
+            CuteArrow(from: UnitPoint(x: 0.05, y: 0.75), to: UnitPoint(x: 0.95, y: 0.6), bend: -0.5)
+                .stroke(Color.gardenLeaf, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                .frame(width: 30, height: 30)
+                .padding(.bottom, 92)
+            VStack(spacing: 6) {
+                garden
+                step("2", "It flies here!")
+            }
+        }
+        .padding(.top, 18) // room for the arrow above the first picture
+    }
+
+    private func step(_ number: String, _ text: String) -> some View {
+        HStack(spacing: 5) {
+            Text(number)
+                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 18, height: 18)
+                .background(Color.habitoGreen, in: Circle())
+            Text(text)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(red: 0.1, green: 0.17, blue: 0.12))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(width: size.width)
+    }
+
+    /// The butterfly's card, small: close and heart buttons, name, rarity and picture.
+    private var card: some View {
+        VStack(spacing: 2) {
+            HStack {
+                miniButton { Image(systemName: "xmark").foregroundStyle(.primary) }
+                Spacer()
+                miniButton {
+                    Image(systemName: "heart.fill")
+                        .foregroundStyle(Color.habitoRed)
+                        .phaseAnimator(reduceMotion ? [1.0] : [1.0, 1.25]) { content, scale in
+                            content.scaleEffect(scale)
+                        } animation: { _ in .easeInOut(duration: 0.55) }
+                }
+            }
+            Text(example.name)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.primary)
+            Text(example.rarity.rawValue)
+                .font(.system(size: 8, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(white: 0.24))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 1.5)
+                .background(example.rarity.color, in: Capsule())
+            Image(example.image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 88)
+                .shadow(color: .black.opacity(0.15), radius: 3, y: 3)
+                .padding(.top, 4)
+            Spacer(minLength: 0)
+        }
+        .padding(8)
+        .frame(width: size.width, height: size.height)
+        .background(Color(white: 0.97), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color(white: 0.82), lineWidth: 1.5))
+    }
+
+    private func miniButton<Label: View>(@ViewBuilder _ label: () -> Label) -> some View {
+        label()
+            .font(.system(size: 10, weight: .semibold))
+            .frame(width: 22, height: 22)
+            .background(Color.primary.opacity(0.08), in: Circle())
+    }
+
+    /// A hand-drawn red arrow curving down onto the heart button, nudging towards it.
+    private var arrowToHeart: some View {
+        CuteArrow(from: UnitPoint(x: 0.1, y: 0.05), to: UnitPoint(x: 0.82, y: 0.95), bend: 0.45)
+            .stroke(Color.habitoRed, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+            .frame(width: 34, height: 34)
+            .phaseAnimator(reduceMotion ? [0.0] : [0.0, 1.0]) { content, t in
+                content.offset(x: -2 * t, y: 3 * t)
+            } animation: { _ in .easeInOut(duration: 0.55) }
+            .offset(x: -14, y: -24)
+    }
+
+    /// A corner of the garden with the butterfly fluttering over the flowers.
+    private var garden: some View {
+        ZStack {
+            // The right-hand flower bed of the garden picture (design 200...402 wide).
+            Image("GardenScene")
+                .resizable()
+                .frame(width: size.width * 402 / 202, height: size.width * 402 / 202 * 870 / 402)
+                .offset(x: -size.width * 0.5, y: -size.height * 0.1)
+                .frame(width: size.width, height: size.height)
+            TimelineView(.animation(paused: reduceMotion)) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                Image(example.image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 50)
+                    .scaleEffect(x: reduceMotion ? 1 : 0.35 + 0.65 * abs(cos(2 * .pi * 2.2 * t)), y: 1)
+                    .shadow(color: .black.opacity(0.18), radius: 3, y: 5)
+                    .offset(x: reduceMotion ? 0 : 10 * sin(t * 0.9), y: reduceMotion ? 0 : -18 + 6 * sin(t * 1.7))
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color(white: 0.82), lineWidth: 1.5))
+    }
+}
+
+/// A friendly curved arrow with a little open arrowhead, drawn in its own box
+/// from one point to another (as fractions of the box).
+private struct CuteArrow: Shape {
+    var from: UnitPoint
+    var to: UnitPoint
+    /// How far the curve bows to one side, as a share of its length.
+    var bend: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let a = CGPoint(x: rect.minX + from.x * rect.width, y: rect.minY + from.y * rect.height)
+        let b = CGPoint(x: rect.minX + to.x * rect.width, y: rect.minY + to.y * rect.height)
+        let length = hypot(b.x - a.x, b.y - a.y)
+        let normal = length > 0 ? CGPoint(x: -(b.y - a.y) / length, y: (b.x - a.x) / length) : .zero
+        let control = CGPoint(x: (a.x + b.x) / 2 + normal.x * bend * length, y: (a.y + b.y) / 2 + normal.y * bend * length)
+        var path = Path()
+        path.move(to: a)
+        path.addQuadCurve(to: b, control: control)
+        // The head follows the curve's direction at its end.
+        let angle = atan2(b.y - control.y, b.x - control.x)
+        let head = max(6, length * 0.28)
+        for side in [-0.5, 0.5] {
+            let wing = angle + .pi + side * 1.1
+            path.move(to: b)
+            path.addLine(to: CGPoint(x: b.x + cos(wing) * head, y: b.y + sin(wing) * head))
+        }
+        return path
     }
 }
 

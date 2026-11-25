@@ -2,7 +2,7 @@
 //  ChildButterfliesView.swift
 //  Habito
 //
-//  "My Collection": one card for every kind of butterfly, from common to legendary.
+//  "My Butterflies": one card for every kind of butterfly, from common to legendary.
 //  Kinds not found yet are grey with a padlock; found ones show the butterfly and its
 //  name, and open it over the page. Below, the caterpillar dreams on its leaf.
 //  The button at the top right leaves the family, once the child types the family code again.
@@ -24,7 +24,7 @@ struct ChildButterfliesView: View {
                 // The title on the left, the leave button level with it on the right,
                 // both lined up with the edges of the cards.
                 HStack(alignment: .center, spacing: 12) {
-                    Text("My Collection")
+                    Text("My Butterflies")
                         .font(.system(size: 40, weight: .bold))
                         .foregroundStyle(Color(red: 0.06, green: 0.07, blue: 0.08))
                         .lineLimit(1)

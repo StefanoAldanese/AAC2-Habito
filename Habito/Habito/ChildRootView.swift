@@ -2,14 +2,14 @@
 //  ChildRootView.swift
 //  Habito
 //
-//  What a joined child sees: a tab bar with Tree and Butterflies. The butterfly
+//  What a joined child sees: a tab bar with Tree, Garden (beta) and Butterflies. The butterfly
 //  pop-up and the butterfly reveal sit above the tab bar.
 //
 
 import SwiftUI
 
 struct ChildRootView: View {
-    enum Section { case tree, butterflies }
+    enum Section { case tree, garden, butterflies }
 
     @State private var game = ChildGame()
     @State private var section = Section.tree
@@ -20,6 +20,9 @@ struct ChildRootView: View {
             ChildTreeView()
                 .tabItem { Label("Tree", systemImage: "tree.fill") }
                 .tag(Section.tree)
+            ChildGardenView()
+                .tabItem { Label("Garden", systemImage: "camera.macro") }
+                .tag(Section.garden)
             ChildButterfliesView(open: $openButterfly)
                 .tabItem { Label { Text("Butterflies") } icon: { Image("TabButterfly") } }
                 .tag(Section.butterflies)

@@ -229,8 +229,8 @@ private struct GardenGuide: View {
         .frame(width: side, height: side)
     }
 
-    /// Step 2: the right-hand flower bed of the garden, fading softly away at its edges (no frame),
-    /// with the butterfly fluttering over it.
+    /// Step 2: the right-hand flower bed of the garden in a sharp round window with a white rim,
+    /// and the butterfly fluttering over it.
     private func gardenPicture(_ side: CGFloat) -> some View {
         // Show about 220 design points of the garden around the flower bed's middle.
         let scale = side / 220
@@ -240,11 +240,10 @@ private struct GardenGuide: View {
                 .resizable()
                 .frame(width: 402 * scale, height: 870 * scale)
                 .offset(x: (201 - focus.x) * scale, y: (435 - focus.y) * scale)
-                .frame(width: side, height: side)
-                .mask(
-                    RadialGradient(stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
-                                   center: .center, startRadius: 0, endRadius: side * 0.5)
-                )
+                .frame(width: side * 0.92, height: side * 0.92)
+                .clipShape(Circle())
+                .overlay(Circle().strokeBorder(.white, lineWidth: 5))
+                .shadow(color: Self.ink.opacity(0.22), radius: 16, y: 10)
             TimelineView(.animation(paused: reduceMotion)) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
                 Image(example.image)

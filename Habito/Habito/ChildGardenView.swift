@@ -82,28 +82,22 @@ struct ChildGardenView: View {
         .allowsHitTesting(false)
     }
 
-    /// With no favourites yet, in the middle of the screen: how to bring butterflies here,
-    /// with two little pictures of the app: tap the heart, and the butterfly flies here.
+    /// With no favourites yet, in the middle of the screen over the blurred garden: one line
+    /// to say what to do, and two cards picturing it (tap the heart, it flies here).
     private var hint: some View {
-        VStack(spacing: 14) {
-            Text("Invite a butterfly!")
+        VStack(spacing: 22) {
+            Text("Go to Butterflies, choose your favourite and make it fly!")
                 .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.1, green: 0.17, blue: 0.12))
-            GardenGuide()
-            Text("Go to Butterflies and tap the heart on a butterfly. It will come to live in the garden.")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(red: 0.1, green: 0.17, blue: 0.12).opacity(0.85))
+                .foregroundStyle(Color(red: 0.08, green: 0.2, blue: 0.12))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                // A soft white glow keeps it easy to read over the blurred garden.
+                .shadow(color: .white.opacity(0.9), radius: 6)
+                .shadow(color: .white.opacity(0.7), radius: 12)
+                .frame(maxWidth: 340)
+            GardenGuide()
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 18)
-        .padding(.bottom, 20)
-        .frame(maxWidth: 360)
-        .background(.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.gardenLeaf, lineWidth: 2))
-        .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 16)
         .transition(.opacity.combined(with: .scale(scale: 0.95)))
     }
 }
@@ -115,25 +109,34 @@ struct ChildGardenView: View {
 private struct GardenGuide: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let example = ButterflyKind.all[1]
-    private let size = CGSize(width: 124, height: 158)
+    private let size = CGSize(width: 120, height: 152)
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 6) {
-            VStack(spacing: 6) {
+        HStack(alignment: .center, spacing: 4) {
+            stepCard {
                 card
                     .overlay(alignment: .topTrailing) { arrowToHeart }
                 step("1", "Tap the heart")
             }
             CuteArrow(from: UnitPoint(x: 0.05, y: 0.75), to: UnitPoint(x: 0.95, y: 0.6), bend: -0.5)
                 .stroke(Color.gardenLeaf, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                .frame(width: 30, height: 30)
-                .padding(.bottom, 92)
-            VStack(spacing: 6) {
+                .frame(width: 26, height: 26)
+                .shadow(color: .white.opacity(0.9), radius: 4)
+            stepCard {
                 garden
                 step("2", "It flies here!")
             }
         }
-        .padding(.top, 18) // room for the arrow above the first picture
+        .padding(.top, 20) // room for the arrow poking out above the first card
+    }
+
+    /// One white card per step, holding its picture and its label.
+    private func stepCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(spacing: 8) { content() }
+            .padding(9)
+            .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.gardenLeaf, lineWidth: 2))
+            .shadow(color: .black.opacity(0.14), radius: 10, y: 5)
     }
 
     private func step(_ number: String, _ text: String) -> some View {

@@ -91,7 +91,7 @@ struct ChildGardenView: View {
 
 // MARK: - The picture guide
 
-/// Two pages, one big card each, swiped like a picture book: first a butterfly's card with an
+/// Two pages, swiped like a picture book: first a butterfly's card with an
 /// arrow to its heart, then the same butterfly flying in the garden. Big pictures and big words,
 /// so a child can read them.
 private struct GardenGuide: View {
@@ -113,12 +113,24 @@ private struct GardenGuide: View {
             }
             .tag(1)
         }
-        .tabViewStyle(.page(indexDisplayMode: .always))
-        .indexViewStyle(.page(backgroundDisplayMode: .always))
+        .tabViewStyle(.page(indexDisplayMode: .never))
         .frame(height: 640)
+        // Our own page dots in the garden's green, with nothing behind them.
+        .overlay(alignment: .bottom) {
+            HStack(spacing: 8) {
+                ForEach(0..<2, id: \.self) { index in
+                    Capsule()
+                        .fill(Color.gardenLeaf.opacity(index == current ? 1 : 0.3))
+                        .frame(width: index == current ? 22 : 9, height: 9)
+                }
+            }
+            .animation(.snappy, value: current)
+            .padding(.bottom, 14)
+            .accessibilityHidden(true)
+        }
     }
 
-    /// One page: a big white card with the step's number, its words and its picture.
+    /// One page, straight on the blurred garden: the step's number, its words and its picture.
     private func page<Picture: View>(_ number: Int, _ text: String, @ViewBuilder picture: () -> Picture) -> some View {
         VStack(spacing: 18) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -132,6 +144,9 @@ private struct GardenGuide: View {
                     .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(red: 0.08, green: 0.2, blue: 0.12))
                     .fixedSize(horizontal: false, vertical: true)
+                    // No box behind the words: a soft white glow keeps them readable on the blur.
+                    .shadow(color: .white, radius: 4)
+                    .shadow(color: .white.opacity(0.8), radius: 10)
                 Spacer(minLength: 0)
             }
             picture()
@@ -142,9 +157,6 @@ private struct GardenGuide: View {
         }
         .padding(22)
         .frame(maxWidth: 380, maxHeight: 580)
-        .background(.white, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(Color.gardenLeaf, lineWidth: 2))
-        .shadow(color: .black.opacity(0.14), radius: 14, y: 6)
         .padding(.horizontal, 16)
         .padding(.bottom, 44) // keeps the card clear of the page dots
     }

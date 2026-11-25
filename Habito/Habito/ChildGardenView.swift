@@ -82,77 +82,71 @@ struct ChildGardenView: View {
         .allowsHitTesting(false)
     }
 
-    /// With no favourites yet, in the middle of the screen over the blurred garden: one line
-    /// to say what to do, and two cards picturing it (tap the heart, it flies here).
+    /// With no favourites yet, over the blurred garden: a two-page guide, one big card per page.
     private var hint: some View {
-        VStack(spacing: 22) {
-            Text("Go to Butterflies, choose your favourite and make it fly!")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.08, green: 0.2, blue: 0.12))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                // A soft white glow keeps it easy to read over the blurred garden.
-                .shadow(color: .white.opacity(0.9), radius: 6)
-                .shadow(color: .white.opacity(0.7), radius: 12)
-                .frame(maxWidth: 340)
-            GardenGuide()
-        }
-        .padding(.horizontal, 16)
-        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        GardenGuide()
+            .transition(.opacity.combined(with: .scale(scale: 0.95)))
     }
 }
 
 // MARK: - The picture guide
 
-/// Two small pictures of the app side by side: a butterfly's card with an arrow to its heart,
-/// then the same butterfly flying in the garden.
+/// Two pages, one big card each, swiped like a picture book: first a butterfly's card with an
+/// arrow to its heart, then the same butterfly flying in the garden. Big pictures and big words,
+/// so a child can read them.
 private struct GardenGuide: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var current = 0
     private let example = ButterflyKind.all[1]
+    /// The pictures are laid out at this small size and then drawn bigger.
     private let size = CGSize(width: 120, height: 152)
+    private let zoom: CGFloat = 2.05
 
     var body: some View {
-        HStack(alignment: .center, spacing: 4) {
-            stepCard {
-                card
-                    .overlay(alignment: .topTrailing) { arrowToHeart }
-                step("1", "Tap the heart")
+        TabView(selection: $current) {
+            page(1, "Go to Butterflies and tap the heart on your favourite") {
+                card.overlay(alignment: .topTrailing) { arrowToHeart }
             }
-            CuteArrow(from: UnitPoint(x: 0.05, y: 0.75), to: UnitPoint(x: 0.95, y: 0.6), bend: -0.5)
-                .stroke(Color.gardenLeaf, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                .frame(width: 26, height: 26)
-                .shadow(color: .white.opacity(0.9), radius: 4)
-            stepCard {
+            .tag(0)
+            page(2, "It flies into your garden!") {
                 garden
-                step("2", "It flies here!")
             }
+            .tag(1)
         }
-        .padding(.top, 20) // room for the arrow poking out above the first card
+        .tabViewStyle(.page(indexDisplayMode: .always))
+        .indexViewStyle(.page(backgroundDisplayMode: .always))
+        .frame(height: 640)
     }
 
-    /// One white card per step, holding its picture and its label.
-    private func stepCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        VStack(spacing: 8) { content() }
-            .padding(9)
-            .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.gardenLeaf, lineWidth: 2))
-            .shadow(color: .black.opacity(0.14), radius: 10, y: 5)
-    }
-
-    private func step(_ number: String, _ text: String) -> some View {
-        HStack(spacing: 5) {
-            Text(number)
-                .font(.system(size: 11, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
-                .frame(width: 18, height: 18)
-                .background(Color.habitoGreen, in: Circle())
-            Text(text)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.1, green: 0.17, blue: 0.12))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+    /// One page: a big white card with the step's number, its words and its picture.
+    private func page<Picture: View>(_ number: Int, _ text: String, @ViewBuilder picture: () -> Picture) -> some View {
+        VStack(spacing: 18) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("\(number)")
+                    .font(.system(size: 18, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(Color.habitoGreen, in: Circle())
+                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 7 }
+                Text(text)
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.08, green: 0.2, blue: 0.12))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            picture()
+                .scaleEffect(zoom)
+                .frame(width: size.width * zoom, height: size.height * zoom)
+                .padding(.top, number == 1 ? 34 : 0) // room for the arrow above the card
+            Spacer(minLength: 0)
         }
-        .frame(width: size.width)
+        .padding(22)
+        .frame(maxWidth: 380, maxHeight: 580)
+        .background(.white, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(Color.gardenLeaf, lineWidth: 2))
+        .shadow(color: .black.opacity(0.14), radius: 14, y: 6)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 44) // keeps the card clear of the page dots
     }
 
     /// The butterfly's card, small: close and heart buttons, name, rarity and picture.

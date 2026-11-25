@@ -120,12 +120,12 @@ private struct GardenGuide: View {
         VStack(spacing: 12) {
             TabView(selection: $current) {
                 page(step: 1, title: "Pick a favourite",
-                     text: "Open Butterflies and tap the heart on the one you love.", arrowRoom: true) {
+                     text: "Open Butterflies and tap the heart on the one you love.") {
                     card.overlay(alignment: .topTrailing) { arrowToHeart }
                 }
                 .tag(0)
                 page(step: 2, title: "Watch it fly",
-                     text: "Your favourites come to live here, flying from flower to flower.", arrowRoom: false) {
+                     text: "Your favourites come to live here, flying from flower to flower.") {
                     garden
                 }
                 .tag(1)
@@ -161,12 +161,14 @@ private struct GardenGuide: View {
 
     /// One page, straight on the soft garden: a small step label, a big title, one line of
     /// help, and the picture, as large as the page allows.
-    private func page<Picture: View>(step: Int, title: String, text: String, arrowRoom: Bool,
+    private func page<Picture: View>(step: Int, title: String, text: String,
                                      @ViewBuilder picture: @escaping () -> Picture) -> some View {
         GeometryReader { proxy in
             let words: CGFloat = 118
             // The arrow above the first picture grows with it, so it counts as part of its height.
-            let arrow: CGFloat = arrowRoom ? 30 : 0
+            // Both pages keep the same room for it, so their pictures are the same size and sit
+            // at the same height when swiping between them.
+            let arrow: CGFloat = 30
             let room = max(80, proxy.size.height - words - 16)
             let zoom = max(1, min(2.45, room / (size.height + arrow), (proxy.size.width - 40) / size.width))
             VStack(spacing: 0) {

@@ -117,7 +117,7 @@ private struct GardenGuide: View {
     private static let ink = Color(red: 0.07, green: 0.19, blue: 0.11)
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             TabView(selection: $current) {
                 page(step: 1, title: "Pick a favourite",
                      text: "Open Butterflies and tap the heart on the one you love.") {
@@ -133,6 +133,7 @@ private struct GardenGuide: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
 
             dots
+                .padding(.bottom, 12)
 
             Button(action: openButterflies) {
                 Label("Go to Butterflies", systemImage: "heart.fill")
@@ -169,7 +170,10 @@ private struct GardenGuide: View {
             // Both pages keep the same room for it, so their pictures are the same size and sit
             // at the same height when swiping between them.
             let arrow: CGFloat = 30
-            let room = max(80, proxy.size.height - words - 16)
+            // The pager cuts off anything past its edges: leave room under the picture for its
+            // soft shadow, or the shadow ends in a hard line.
+            let shadowRoom: CGFloat = 40
+            let room = max(80, proxy.size.height - words - 16 - shadowRoom)
             let zoom = max(1, min(2.45, room / (size.height + arrow), (proxy.size.width - 40) / size.width))
             VStack(spacing: 0) {
                 Text("STEP \(step) OF 2")

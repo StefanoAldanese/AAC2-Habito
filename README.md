@@ -87,9 +87,7 @@ Key separations:
 
 The parent app generates a six-character room code; enter it on the child's device. For presentations, `ChildGame.startNewChild()` seeds the child with 2 butterflies and 6 perfect days, so one perfect day demonstrates the full butterfly reveal.
 
----
-
-## Testing
+### Testing
 
 - UI tests can simulate a shake via the `HABITO_TEST_SHAKE` environment variable (`debugShake` button, debug builds only).
 - Accessibility identifiers are provided throughout (`caterpillar`, `garden`, `roomCodeBoxes`, …) for automated UI testing.

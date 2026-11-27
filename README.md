@@ -28,10 +28,6 @@ Children with a full day of tasks done deserve more than a checkmark. In Habito:
   <img width="1262" height="710" alt="screen" src="https://github.com/user-attachments/assets/b85e00cf-cf43-464f-8a30-a208cc8dec47" />
 </p>
 
----
-
-## Screens
-
 <p align="center">
   <img width="1266" height="713" alt="ipad" src="https://github.com/user-attachments/assets/8b61f0f8-7968-42ff-938e-c4e5ebdd59fd" />
 </p>

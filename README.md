@@ -9,7 +9,7 @@ This repository contains the **iOS frontend** (SwiftUI). The backend lives in a 
 </p>
 
 <em align="center">
-*Habito — Behind every growing child is someone who believes in them*
+Habito — Behind every growing child is someone who believes in them
 </em>
 
 ---

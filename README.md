@@ -102,7 +102,7 @@ The parent app generates a six-character room code; enter it on the child's devi
 | **Stefano Emanuele Aldanese** ([@StefanoAldanese](https://github.com/StefanoAldanese)) | Developer — frontend & testing |
 | **Sanatbek Bokijonov** ([@BokijonovS](https://github.com/BokijonovS)) | Developer — backend & frontend |
 | **Sanaz Asadi** | Research & Keynote |
-| **Weerapurage Nipunika Sanduni Fernando** | Keynote |
+| **Weerapurage Nipunika Sanduni Fernando** | Research & Keynote |
 | **Alessandra Ambrosio** | Artist — hand-drawn assets |
 
 ---

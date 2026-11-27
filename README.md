@@ -5,7 +5,7 @@
 This repository contains the **iOS frontend** (SwiftUI). The backend lives in a separate repository: [BokijonovS/habito](https://github.com/BokijonovS/habito).
 
 <p align="center">
-  <img src="images/app-icon.png" alt="Habito App Icon" width="60%" />
+<img width="1274" height="714" alt="habito scren" src="https://github.com/user-attachments/assets/0f565554-42e4-4ef2-8a12-ddd04d736bac" />
 </p>
 
 ---
@@ -21,11 +21,7 @@ Children with a full day of tasks done deserve more than a checkmark. In Habito:
 - Butterflies join **My Butterflies**, a collection from common to legendary. The child can heart favourites, and those favourites come to life in the **Garden**.
 
 <p align="center">
-  <img src="images/parent-child.png" alt="Parent and Child Experience" width="90%" />
-</p>
-
-<p align="center">
-  <em>Two experiences. One connection.</em>
+  <img width="1262" height="710" alt="screen" src="https://github.com/user-attachments/assets/b85e00cf-cf43-464f-8a30-a208cc8dec47" />
 </p>
 
 ---
@@ -33,7 +29,7 @@ Children with a full day of tasks done deserve more than a checkmark. In Habito:
 ## Screens
 
 <p align="center">
-  <img src="images/ipad-and-phone.png" alt="Habito on iPad and iPhone" width="90%" />
+  <img width="1266" height="713" alt="ipad" src="https://github.com/user-attachments/assets/8b61f0f8-7968-42ff-938e-c4e5ebdd59fd" />
 </p>
 
 | Screen | What it does |
@@ -55,11 +51,7 @@ Children with a full day of tasks done deserve more than a checkmark. In Habito:
 - **Local game state**: perfect days, butterflies and favourites are persisted in `UserDefaults`; the child token lives in the Keychain.
 
 <p align="center">
-  <img src="images/caterpillar-butterflies.png" alt="Caterpillar and Butterflies" width="90%" />
-</p>
-
-<p align="center">
-  <em>A symbol of growth and consistency.</em>
+  <img width="1268" height="711" alt="caterpillar" src="https://github.com/user-attachments/assets/87ffa484-26e3-44c0-84e7-b52659699eed" />
 </p>
 
 ---

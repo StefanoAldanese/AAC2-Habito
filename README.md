@@ -113,4 +113,3 @@ The parent app generates a six-character room code; enter it on the child's devi
 ---
 
 *Habito — Behind every growing child is someone who believes in them*
-```

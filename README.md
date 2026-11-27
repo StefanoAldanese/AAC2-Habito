@@ -8,6 +8,10 @@ This repository contains the **iOS frontend** (SwiftUI). The backend lives in a 
 <img width="1274" height="714" alt="habito scren" src="https://github.com/user-attachments/assets/0f565554-42e4-4ef2-8a12-ddd04d736bac" />
 </p>
 
+<em align="center">
+*Habito — Behind every growing child is someone who believes in them*
+</em>
+
 ---
 
 ## The idea
@@ -109,7 +113,3 @@ The parent app generates a six-character room code; enter it on the child's devi
 
 - Backend: [github.com/BokijonovS/habito](https://github.com/BokijonovS/habito)
 - Built for the **AAC2** course project.
-
----
-
-*Habito — Behind every growing child is someone who believes in them*

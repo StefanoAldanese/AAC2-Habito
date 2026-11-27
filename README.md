@@ -34,7 +34,7 @@ Children with a full day of tasks done deserve more than a checkmark. In Habito:
 
 | Screen | What it does |
 |---|---|
-| **Join your family** | Six-box room code entry (with error shake). The code comes from the parent's phone. |
+| **Join your family** | Six-box room code entry. The code comes from the parent's phone. No account required for the child |
 | **Tree** | The main screen: hand-drawn tree, one apple per task, caterpillar on a leaf, progress bar. Tap a blossom to read the task aloud; drag a ripe apple to the caterpillar to feed it; drop it anywhere else and it falls away and regrows. |
 | **Garden** (beta) | Favourite butterflies flutter between two flower beds, land on flowers, rest with slow wing beats, and fly off. A two-page picture guide shows how it works. |
 | **Butterflies** | Collection grid of every butterfly kind (locked ones are grey with a padlock). Tap a found butterfly for its name, Latin name, rarity and a fun fact. Heart it to send it to the Garden. |

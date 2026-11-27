@@ -60,7 +60,7 @@ Children with a full day of tasks done deserve more than a checkmark. In Habito:
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 Key separations:
 
@@ -89,7 +89,7 @@ The parent app generates a six-character room code; enter it on the child's devi
 
 ---
 
-## 🧪 Testing
+## Testing
 
 - UI tests can simulate a shake via the `HABITO_TEST_SHAKE` environment variable (`debugShake` button, debug builds only).
 - Accessibility identifiers are provided throughout (`caterpillar`, `garden`, `roomCodeBoxes`, …) for automated UI testing.
@@ -97,7 +97,7 @@ The parent app generates a six-character room code; enter it on the child's devi
 
 ---
 
-## 👥 The team
+## The team
 
 | Name | Role |
 |---|---|
